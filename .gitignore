@@ -35,3 +35,7 @@ Thumbs.db
 # Env
 .env
 .env.*
+
+# Docs
+구조도.md
+
