@@ -5,9 +5,8 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes
+    # 순수 인메모리 휘발 모드 (서버/컨테이너 종료 시 임시 방 데이터 즉시 증발)
+    command: redis-server --save "" --appendonly no
 
   mariadb:
     image: mariadb:11
@@ -24,7 +23,5 @@ services:
       - mariadb-data:/var/lib/mysql
 
 volumes:
-  redis-data:
-    driver: local
   mariadb-data:
     driver: local
