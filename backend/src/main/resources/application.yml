@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: talklite
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # standalone 단일 노드 모드 (Lua 실행/Lettuce 설정 충돌 방지, NFR-SCALE-02)
+
+server:
+  port: 8080
