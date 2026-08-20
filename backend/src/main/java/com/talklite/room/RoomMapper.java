@@ -13,6 +13,7 @@ public class RoomMapper {
     public static final String META_KEY_PREFIX = "room:%s:meta";
     public static final String MEMBERS_KEY_PREFIX = "room:%s:members";
     public static final String TAG_INDEX_PREFIX = "tag:%s:rooms";
+    public static final String GAME_INDEX_PREFIX = "game:%s:rooms";
 
     private final StringRedisTemplate redis;
 
@@ -32,6 +33,10 @@ public class RoomMapper {
         return TAG_INDEX_PREFIX.formatted(tag);
     }
 
+    public String gameIndexKey(String game) {
+        return GAME_INDEX_PREFIX.formatted(game.toLowerCase());
+    }
+
     public void save(Room room) {
         Map<String, String> hash = new LinkedHashMap<>();
         hash.put("game", room.game());
@@ -44,6 +49,7 @@ public class RoomMapper {
         redis.opsForHash().putAll(metaKey(room.id()), hash);
         redis.opsForSet().add(membersKey(room.id()), room.host());
         room.tags().forEach(tag -> redis.opsForSet().add(tagIndexKey(tag), room.id()));
+        redis.opsForSet().add(gameIndexKey(room.game()), room.id());
     }
 
     public Room find(String roomId) {

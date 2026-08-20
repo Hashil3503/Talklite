@@ -14,7 +14,7 @@ public record RoomResponse(
         int count,
         List<String> members
 ) {
-    static RoomResponse from(Room room, List<String> members) {
+    public static RoomResponse from(Room room, List<String> members) {
         return new RoomResponse(
                 room.id(),
                 room.game(),
