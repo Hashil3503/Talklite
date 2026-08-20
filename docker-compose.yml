@@ -1,0 +1,30 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: talklite-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  mariadb:
+    image: mariadb:11
+    container_name: talklite-mariadb
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpassword
+      MARIADB_DATABASE: talklite
+      MARIADB_USER: talklite
+      MARIADB_PASSWORD: talklitepassword
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+volumes:
+  redis-data:
+    driver: local
+  mariadb-data:
+    driver: local
