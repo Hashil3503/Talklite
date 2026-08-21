@@ -1,7 +1,7 @@
 {
   "name": "talklite-frontend",
   "private": true,
- "version": "0.0.0",
+  "version": "0.0.0",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"

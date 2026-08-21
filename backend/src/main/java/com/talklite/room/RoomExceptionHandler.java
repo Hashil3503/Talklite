@@ -23,6 +23,36 @@ public class RoomExceptionHandler {
                 .body(Map.of("error", "room_full"));
     }
 
+    @ExceptionHandler(UserBannedException.class)
+    ResponseEntity<Map<String, String>> banned(UserBannedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "user_banned"));
+    }
+
+    @ExceptionHandler(UnauthorizedHostException.class)
+    ResponseEntity<Map<String, String>> unauthorized(UnauthorizedHostException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "unauthorized_host"));
+    }
+
+    @ExceptionHandler(InvalidKickException.class)
+    public ResponseEntity<Map<String, String>> invalidKick(InvalidKickException e) {
+        return ResponseEntity.badRequest()
+                .body(Map.of("error", "invalid_kick"));
+    }
+
+    @ExceptionHandler(InviteRequiredException.class)
+    public ResponseEntity<Map<String, String>> inviteRequired(InviteRequiredException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "invite_required"));
+    }
+
+    @ExceptionHandler(InvalidInviteCodeException.class)
+    public ResponseEntity<Map<String, String>> invalidInvite(InvalidInviteCodeException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "invite_invalid"));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<Map<String, String>> invalid(MethodArgumentNotValidException e) {
         return ResponseEntity.badRequest().body(Map.of("error", "invalid_request"));

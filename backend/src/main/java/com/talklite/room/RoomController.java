@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class RoomController {
 
     private final RoomService roomService;
+    private final KickService kickService;
 
-    public RoomController(RoomService roomService) {
+    public RoomController(RoomService roomService, KickService kickService) {
         this.roomService = roomService;
+        this.kickService = kickService;
     }
 
     @PostMapping
@@ -47,5 +49,10 @@ public class RoomController {
     @PostMapping("/{roomId}/leave")
     public RoomResponse leaveAlias(@PathVariable String roomId, @Valid @RequestBody JoinRequest body) {
         return roomService.leave(roomId, body.user());
+    }
+
+    @PostMapping("/{roomId}/kick")
+    public RoomResponse kick(@PathVariable String roomId, @Valid @RequestBody KickRequest body) {
+        return kickService.kick(roomId, body);
     }
 }
