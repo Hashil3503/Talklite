@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { type RoomResponse } from '../lib/api'
 import { ensureStompConnected } from '../lib/stomp'
+import { useVoiceStore } from './voiceStore'
 
 export interface ChatMessage {
   messageId: string
@@ -23,6 +24,7 @@ export interface RoomEvent {
   capacity: number
   host: string
   voiceCount: number
+  voiceMembers?: string[]
   timestamp: number
   extra?: Record<string, any>
 }
@@ -195,6 +197,10 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           host: event.host,
         },
       })
+    } else if (event.type === 'VOICE_STATUS_CHANGED') {
+      const members = Array.isArray(event.voiceMembers) ? event.voiceMembers : []
+      set({ voiceMembers: members })
+      useVoiceStore.getState().handleVoiceMembers(members)
     }
   },
 }))

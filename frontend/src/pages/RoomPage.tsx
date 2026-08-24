@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useRoomStore } from '../store/roomStore'
+import { useVoiceStore } from '../store/voiceStore'
 import { ChatLog } from '../components/room/ChatLog'
 import { MemberList } from '../components/room/MemberList'
 import { InviteModal } from '../components/room/InviteModal'
+import { VoiceBar } from '../components/voice/VoiceBar'
 import { leaveRoom, getRoom } from '../lib/api'
 
 interface RoomPageProps {
@@ -32,6 +34,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
         .finally(() => setLoading(false))
     }
   }, [roomId, currentRoom, setCurrentRoom, onLeave])
+
+  // 방 진입 시 발화 상태 구독, 이탈/언마운트 시 음성 리소스 정리 (LEAVE/퇴장/언마운트)
+  useEffect(() => {
+    useVoiceStore.getState().connectRoomVoice(roomId)
+    return () => {
+      useVoiceStore.getState().disconnectRoomVoice()
+    }
+  }, [roomId])
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
@@ -133,6 +143,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
         isOpen={showInvite}
         onClose={() => setShowInvite(false)}
       />
+
+      <VoiceBar roomId={roomId} />
     </div>
   )
 }

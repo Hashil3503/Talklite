@@ -77,6 +77,16 @@ public class RoomMapper {
         return size == null ? 0 : size.intValue();
     }
 
+    public boolean isVoiceMember(String roomId, String user) {
+        Boolean member = redis.opsForSet().isMember(voiceKey(roomId), user);
+        return Boolean.TRUE.equals(member);
+    }
+
+    public List<String> voiceMembers(String roomId) {
+        Set<String> members = redis.opsForSet().members(voiceKey(roomId));
+        return members == null ? List.of() : members.stream().sorted().toList();
+    }
+
     public String tagIndexKey(String tag) {
         return TAG_INDEX_PREFIX.formatted(tag);
     }

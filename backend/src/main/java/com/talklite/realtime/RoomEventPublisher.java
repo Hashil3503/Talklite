@@ -33,7 +33,8 @@ public class RoomEventPublisher {
         RoomEvent event = new RoomEvent(
                 type, room.id(), actor, targetUser,
                 roomMapper.members(room.id()).size(), room.capacity(), room.host(),
-                roomMapper.voiceCount(room.id()), System.currentTimeMillis(), Map.of()
+                roomMapper.voiceCount(room.id()), roomMapper.voiceMembers(room.id()),
+                System.currentTimeMillis(), Map.of()
         );
         publisher.publish("talklite:room:%s:events".formatted(room.id()), event);
         return event;

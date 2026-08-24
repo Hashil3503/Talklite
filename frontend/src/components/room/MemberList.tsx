@@ -1,9 +1,12 @@
 import React from 'react'
 import { useRoomStore } from '../../store/roomStore'
+import { useVoiceStore } from '../../store/voiceStore'
 import { kickUser } from '../../lib/api'
 
 export const MemberList: React.FC = () => {
   const currentRoom = useRoomStore((state) => state.currentRoom)
+  const voiceMembers = useRoomStore((state) => state.voiceMembers)
+  const speaking = useVoiceStore((state) => state.speakingUsers)
   const currentUserId = localStorage.getItem('talklite_uid') || ''
 
   if (!currentRoom) return null
@@ -34,6 +37,8 @@ export const MemberList: React.FC = () => {
         {currentRoom.members.map((member) => {
           const isMemberHost = member === currentRoom.host
           const isMe = member === currentUserId
+          const inVoice = voiceMembers.includes(member)
+          const isTalking = !!speaking[member]
 
           return (
             <div
@@ -41,10 +46,16 @@ export const MemberList: React.FC = () => {
               className="flex items-center justify-between px-2.5 py-2 rounded-lg bg-zinc-800/40 hover:bg-zinc-800/80 transition-colors group"
             >
               <div className="flex items-center space-x-2 min-w-0">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <div
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    inVoice ? (isTalking ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-600') : 'bg-zinc-600'
+                  } ${inVoice ? 'ring-2 ring-emerald-400/50' : ''}`}
+                />
                 <span className={`text-sm truncate ${isMe ? 'font-bold text-white' : 'text-zinc-300'}`}>
                   {member}
                 </span>
+                {inVoice && <span title="통화 중" className="text-xs shrink-0">🎙️</span>}
+                {isTalking && <span title="발화 중" className="text-emerald-400 text-xs shrink-0">●</span>}
                 {isMemberHost && <span title="방장" className="text-amber-400 text-xs shrink-0">👑</span>}
                 {isMe && <span className="text-[10px] text-zinc-500 shrink-0">(나)</span>}
               </div>
