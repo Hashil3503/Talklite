@@ -5,7 +5,7 @@ import { ChatLog } from '../components/room/ChatLog'
 import { MemberList } from '../components/room/MemberList'
 import { InviteModal } from '../components/room/InviteModal'
 import { VoiceBar } from '../components/voice/VoiceBar'
-import { leaveRoom, getRoom } from '../lib/api'
+import { leaveRoom, getRoom, deleteRoom } from '../lib/api'
 
 interface RoomPageProps {
   roomId: string
@@ -51,12 +51,29 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
   }
 
   const handleExit = async () => {
-    if (confirm('방에서 나가시겠습니까?')) {
+    const lastMember = currentRoom && currentRoom.count === 1 && currentRoom.type === 'TEMPORARY'
+    const message = lastMember ? '마지막 인원이므로 방이 삭제됩니다.\n계속 나가시겠습니까?' : '방에서 나가시겠습니까?'
+    if (confirm(message)) {
       try {
         await leaveRoom(roomId, currentUserId)
       } catch {}
       setCurrentRoom(null)
       onLeave()
+    }
+  }
+
+  const handleDeleteRoom = async () => {
+    if (!currentRoom) return
+    const ok = confirm(
+      '정말 방을 완전히 삭제(폭파)하시겠습니까?\n방 안의 모든 인원이 퇴장되며 영구 방 정보가 완전히 삭제됩니다.'
+    )
+    if (!ok) return
+    try {
+      await deleteRoom(roomId, currentUserId)
+      setCurrentRoom(null)
+      onLeave()
+    } catch (err: any) {
+      alert(err.message || '방 삭제에 실패했습니다.')
     }
   }
 
@@ -97,6 +114,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
               className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition-colors flex items-center gap-1.5"
             >
               <span>🔒 초대코드</span>
+            </button>
+          )}
+
+          {currentRoom.host === currentUserId && (
+            <button
+              onClick={handleDeleteRoom}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 transition-colors flex items-center gap-1"
+            >
+              <span>🗑️ 방 삭제</span>
             </button>
           )}
 

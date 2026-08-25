@@ -34,7 +34,6 @@ export class AudioDetector {
     const analyser = ctx.createAnalyser()
     analyser.fftSize = 2048
     source.connect(analyser)
-    analyser.connect(ctx.destination)
     this.ctx = ctx
     this.analyser = analyser
     this.talking = false

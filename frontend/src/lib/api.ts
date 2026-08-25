@@ -172,3 +172,13 @@ export async function searchRooms(params: SearchParams = {}): Promise<RoomRespon
   }
   return res.json()
 }
+
+export async function deleteRoom(roomId: string, actor: string): Promise<void> {
+  const res = await fetch(`/api/rooms/${roomId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actor }),
+  })
+  if (!res.ok) return parseError(res)
+}
+

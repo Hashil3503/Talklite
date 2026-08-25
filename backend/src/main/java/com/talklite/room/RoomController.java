@@ -55,4 +55,10 @@ public class RoomController {
     public RoomResponse kick(@PathVariable String roomId, @Valid @RequestBody KickRequest body) {
         return kickService.kick(roomId, body);
     }
+
+    @DeleteMapping("/{roomId}")
+    public org.springframework.http.ResponseEntity<Void> deleteRoom(@PathVariable String roomId, @Valid @RequestBody DeleteRoomRequest body) {
+        roomService.deleteByHost(roomId, body.actor());
+        return org.springframework.http.ResponseEntity.noContent().build();
+    }
 }

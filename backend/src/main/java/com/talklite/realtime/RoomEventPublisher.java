@@ -18,8 +18,10 @@ public class RoomEventPublisher {
     public static final String ROOM_EVENT_HOST_MIGRATED = "HOST_MIGRATED";
     public static final String ROOM_EVENT_KICKED = "MEMBER_KICKED";
     public static final String ROOM_EVENT_VOICE = "VOICE_STATUS_CHANGED";
+    public static final String ROOM_EVENT_DESTROYED = "ROOM_DESTROYED";
     public static final String LOBBY_ROOM_UPDATE = "ROOM_UPDATE";
     public static final String LOBBY_VOICE_BADGE = "VOICE_BADGE_UPDATE";
+    public static final String LOBBY_ROOM_REMOVED = "ROOM_REMOVED";
 
     private final RedisMessagePublisher publisher;
     private final RoomMapper roomMapper;
@@ -57,5 +59,23 @@ public class RoomEventPublisher {
 
     public void chat(String roomId, Object message) {
         publisher.publish("talklite:room:%s:chat".formatted(roomId), message);
+    }
+
+    /** 방장 전용 방 폭파 시 방 내부 참여자 대상 강제 퇴장 이벤트 발행 */
+    public void publishRoomDestroyed(Room room, String actor) {
+        RoomEvent event = new RoomEvent(
+                ROOM_EVENT_DESTROYED, room.id(), actor, null,
+                0, room.capacity(), room.host(),
+                0, java.util.List.of(),
+                System.currentTimeMillis(), Map.of()
+        );
+        publisher.publish("talklite:room:%s:events".formatted(room.id()), event);
+    }
+
+    /** 영구방 파기 시 로비 ROOM_REMOVED 발행 (0명 스냅샷) */
+    public void publishRoomRemoved(Room room) {
+        publisher.publish("talklite:lobby",
+                new LobbyEvent(LOBBY_ROOM_REMOVED, room.id(), room.game(),
+                        0, room.capacity(), false, 0, System.currentTimeMillis()));
     }
 }

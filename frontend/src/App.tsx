@@ -14,18 +14,13 @@ export function App() {
   // 세션 토큰 초기화
   useEffect(() => {
     const uid = getOrCreateAnonymousId()
-    const storedToken = localStorage.getItem('talklite_token')
-
-    if (!storedToken) {
-      createSession(uid).then((res) => {
-        localStorage.setItem('talklite_token', res.token)
-        setSessionToken(res.token)
-      }).catch((err) => {
-        console.warn('Failed to auto-create session:', err)
-      })
-    } else {
-      setSessionToken(storedToken)
-    }
+    createSession(uid).then((res) => {
+      localStorage.setItem('talklite_token', res.token)
+      localStorage.setItem('talklite_token_expires_at', String(Date.now() + res.expiresIn * 1000))
+      setSessionToken(res.token)
+    }).catch((err) => {
+      console.warn('Failed to auto-create session:', err)
+    })
   }, [])
 
   // URL 동기화

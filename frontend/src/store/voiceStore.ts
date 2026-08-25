@@ -20,15 +20,14 @@ export function getUid(): string {
 function attachRemoteAudio(peerId: string, stream: MediaStream): void {
   const id = `remote-audio-${peerId}`
   let audio = document.getElementById(id) as HTMLAudioElement | null
+  if (audio?.srcObject === stream) return
   if (!audio) {
     audio = document.createElement('audio')
     audio.id = id
     audio.autoplay = true
     document.body.appendChild(audio)
   }
-  if (audio.srcObject !== stream) {
-    audio.srcObject = stream
-  }
+  audio.srcObject = stream
   void audio.play().catch(() => {
     // 자동 재생 차단은 사용자 제스처 기반 승인으로 재시도
   })
@@ -81,6 +80,7 @@ interface VoiceState {
 
   connectRoomVoice: (roomId: string) => Promise<void>
   disconnectRoomVoice: () => void
+  forceDisconnectVoice: () => void
   joinVoice: (roomId: string) => Promise<void>
   leaveVoice: () => void
   toggleMute: () => void
@@ -135,6 +135,14 @@ export const useVoiceStore = create<VoiceState>((set) => ({
     set({ isInVoice: false, isMuted: false, isDeafened: false, voiceMembers: [], speakingUsers: {} })
   },
 
+  forceDisconnectVoice: () => {
+    speakerUnsub?.unsubscribe()
+    speakerUnsub = null
+    cleanupVoiceResources()
+    activeRoomId = null
+    set({ isInVoice: false, isMuted: false, isDeafened: false, voiceMembers: [], speakingUsers: {} })
+  },
+
   joinVoice: async (roomId: string) => {
     if (useVoiceStore.getState().isInVoice) {
       if (activeRoomId !== roomId) {
@@ -156,15 +164,23 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       }
       const client = await ensureStompConnected()
       stompClient = client
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
       localStream = stream
       manager.setLocalStream(stream)
       startDetector(roomId)
       stompClient.publish({ destination: `/app/room/${roomId}/voice/start`, body: '{}' })
       set({ isInVoice: true, isMuted: false, isDeafened: false, error: null })
-    } catch {
+    } catch (err: unknown) {
+      console.error('[voice] join failed:', err)
       cleanupVoiceResources()
-      set({ isInVoice: false, error: '마이크 접근 권한이 필요합니다' })
+      const detail = err instanceof Error ? err.message : '마이크 권한 또는 서버 연결을 확인해 주세요'
+      set({ isInVoice: false, error: `음성 통화 연결에 실패했습니다: ${detail}` })
     }
   },
 
@@ -197,7 +213,14 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   setDevice: async (deviceId: string) => {
     if (!localStream || !manager || !activeRoomId) return
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        },
+      })
       if (useVoiceStore.getState().isMuted) {
         stream.getAudioTracks().forEach((t) => {
           t.enabled = false

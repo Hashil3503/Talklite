@@ -2,6 +2,7 @@ package com.talklite.search;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.talklite.test.IntegrationTestCleanup;
 import com.talklite.room.CreateRoomRequest;
 import com.talklite.room.RoomResponse;
 import com.talklite.room.RoomScope;
@@ -27,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-public class SearchApiIntegrationTest {
+public class SearchApiIntegrationTest extends IntegrationTestCleanup {
 
     @Autowired
     private MockMvc mockMvc;

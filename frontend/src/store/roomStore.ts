@@ -169,6 +169,13 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const { currentRoom } = get()
     if (!currentRoom || currentRoom.id !== event.roomId) return
 
+    if (event.type === 'ROOM_DESTROYED') {
+      useVoiceStore.getState().forceDisconnectVoice()
+      get().disconnectRoomStomp()
+      set({ currentRoom: null, messages: [], voiceMembers: [] })
+      return
+    }
+
     if (event.type === 'MEMBER_JOIN' && event.actor) {
       const members = Array.from(new Set([...currentRoom.members, event.actor])).sort()
       set({

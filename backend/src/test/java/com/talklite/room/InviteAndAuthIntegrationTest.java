@@ -2,6 +2,7 @@ package com.talklite.room;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.talklite.test.IntegrationTestCleanup;
 import com.talklite.auth.SessionRequest;
 import com.talklite.auth.SessionResponse;
 import com.talklite.realtime.StompTestClient;
@@ -23,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
-public class InviteAndAuthIntegrationTest {
+public class InviteAndAuthIntegrationTest extends IntegrationTestCleanup {
 
     @Autowired
     private MockMvc mockMvc;

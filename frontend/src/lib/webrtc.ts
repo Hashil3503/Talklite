@@ -1,6 +1,13 @@
 import { ensureStompConnected } from './stomp'
 import type { Client, IMessage } from '@stomp/stompjs'
 
+const RTC_CONFIG: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
+}
+
 export type SignalType = 'OFFER' | 'ANSWER' | 'ICE_CANDIDATE'
 
 export interface SignalCandidate {
@@ -77,6 +84,14 @@ export class WebRtcManager {
 
   setLocalStream(stream: MediaStream): void {
     this.localStream = stream
+    const track = stream.getAudioTracks()[0]
+    if (!track) return
+    for (const session of this.sessions.values()) {
+      const hasAudioSender = session.pc.getSenders().some((sender) => sender.track?.kind === 'audio')
+      if (!hasAudioSender) {
+        session.pc.addTrack(track, stream)
+      }
+    }
   }
 
   /** 오디오 장치 전환: 모든 피어 sender의 트랙을 교체 (FR-VOICE-04) */
@@ -125,7 +140,7 @@ export class WebRtcManager {
   }
 
   private createSession(remoteId: string): PeerSession {
-    const pc = new RTCPeerConnection()
+    const pc = new RTCPeerConnection(RTC_CONFIG)
     const session: PeerSession = {
       pc,
       polite: this.me > remoteId,
@@ -166,10 +181,9 @@ export class WebRtcManager {
     }
 
     const stream = this.localStream
-    if (stream) {
-      for (const track of stream.getAudioTracks()) {
-        pc.addTrack(track, stream)
-      }
+    const track = stream?.getAudioTracks()[0]
+    if (track && !pc.getSenders().some((sender) => sender.track?.kind === 'audio')) {
+      pc.addTrack(track, stream)
     }
     return session
   }
