@@ -182,3 +182,20 @@ export async function deleteRoom(roomId: string, actor: string): Promise<void> {
   if (!res.ok) return parseError(res)
 }
 
+export interface ApiChatMessage {
+  messageId: string
+  clientRequestId?: string | null
+  roomId: string
+  sender: string
+  senderName: string
+  content: string
+  timestamp: number
+  type: string
+}
+
+export async function getRoomMessages(roomId: string, limit = 50): Promise<ApiChatMessage[]> {
+  const res = await fetch(`/api/rooms/${roomId}/messages?limit=${limit}`)
+  if (!res.ok) return parseError(res)
+  return res.json()
+}
+

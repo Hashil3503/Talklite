@@ -1,5 +1,6 @@
 package com.talklite.room;
 
+import com.talklite.chat.PermanentRoomChatRepository;
 import com.talklite.realtime.RoomEventPublisher;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -22,17 +23,20 @@ public class RoomService {
     private final DefaultRedisScript<Long> joinScript;
     private final RoomEventPublisher eventPublisher;
     private final PermanentRoomRepository permanentRoomRepository;
+    private final PermanentRoomChatRepository permanentRoomChatRepository;
 
     public RoomService(StringRedisTemplate redis,
                    RoomMapper roomMapper,
                    @Qualifier("joinScript") DefaultRedisScript<Long> joinScript,
                    RoomEventPublisher eventPublisher,
-                   PermanentRoomRepository permanentRoomRepository) {
+                   PermanentRoomRepository permanentRoomRepository,
+                   PermanentRoomChatRepository permanentRoomChatRepository) {
         this.redis = redis;
         this.roomMapper = roomMapper;
         this.joinScript = joinScript;
         this.eventPublisher = eventPublisher;
         this.permanentRoomRepository = permanentRoomRepository;
+        this.permanentRoomChatRepository = permanentRoomChatRepository;
     }
 
     public RoomResponse create(CreateRoomRequest request) {
@@ -156,8 +160,9 @@ public class RoomService {
      * 방장 전용 명시적 방 삭제 (Phase 7, FR-ROOM-08, T-10).
      * 1. 방장 권한(actor == host) 검증
      * 2. MariaDB permanent_room 선삭제 (서버 재기동 부활 방지)
-     * 3. Redis destroy.lua 원자적 강제 파기
-     * 4. /topic/room/{id} ROOM_DESTROYED 이벤트 및 /topic/lobby ROOM_REMOVED 이벤트 전파
+     * 3. 채팅 대화 내역 영구 소멸 (MariaDB permanent_room_chat 전체 삭제)
+     * 4. Redis destroy.lua 원자적 강제 파기 (room:{id}:messages 포함)
+     * 5. /topic/room/{id} ROOM_DESTROYED 이벤트 및 /topic/lobby ROOM_REMOVED 이벤트 전파
      */
     public void deleteByHost(String roomId, String actor) {
         Room room = roomMapper.find(roomId);
@@ -170,6 +175,7 @@ public class RoomService {
         if (room.type() == RoomType.PERMANENT) {
             permanentRoomRepository.delete(roomId);
         }
+        permanentRoomChatRepository.deleteByRoomId(roomId);
         roomMapper.destroyRoom(roomId, room);
         eventPublisher.publishRoomDestroyed(room, actor);
         eventPublisher.publishRoomRemoved(room);

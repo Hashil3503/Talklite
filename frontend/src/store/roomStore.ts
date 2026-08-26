@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { type RoomResponse } from '../lib/api'
+import { type RoomResponse, type ApiChatMessage, getRoomMessages } from '../lib/api'
 import { ensureStompConnected } from '../lib/stomp'
 import { useVoiceStore } from './voiceStore'
 
@@ -29,6 +29,15 @@ export interface RoomEvent {
   extra?: Record<string, any>
 }
 
+type RawChatMessage = Omit<ChatMessage, 'sentAt'> & { sentAt?: number; timestamp?: number }
+
+function normalizeMessage(raw: RawChatMessage): ChatMessage {
+  return {
+    ...raw,
+    sentAt: raw.sentAt ?? raw.timestamp ?? Date.now(),
+  } as ChatMessage
+}
+
 interface RoomState {
   currentRoom: RoomResponse | null
   messages: ChatMessage[]
@@ -36,6 +45,7 @@ interface RoomState {
   subscriptions: { unsubscribe: () => void }[]
 
   setCurrentRoom: (room: RoomResponse | null) => void
+  loadRecentMessages: (roomId: string) => Promise<void>
   addMessage: (msg: ChatMessage) => void
   sendChat: (content: string) => Promise<void>
   connectRoomStomp: (roomId: string) => Promise<void>
@@ -53,25 +63,59 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     set({ currentRoom: room, messages: [], voiceMembers: [] })
     if (room) {
       get().connectRoomStomp(room.id)
+      void get().loadRecentMessages(room.id)
     } else {
       get().disconnectRoomStomp()
     }
   },
 
+  loadRecentMessages: async (roomId: string) => {
+    try {
+      const history: ApiChatMessage[] = await getRoomMessages(roomId, 50)
+      if (!history || history.length === 0) return
+      const normalized: ChatMessage[] = history.map((h) =>
+        normalizeMessage({
+          messageId: h.messageId,
+          clientRequestId: h.clientRequestId ?? undefined,
+          roomId: h.roomId,
+          sender: h.sender,
+          senderName: h.senderName,
+          content: h.content,
+          timestamp: h.timestamp,
+          type: h.type,
+        } as unknown as RawChatMessage)
+      )
+      set((state) => {
+        if (state.currentRoom?.id !== roomId) return state
+        const existingIds = new Set(state.messages.map((m) => m.messageId))
+        const fresh = normalized.filter((m) => !existingIds.has(m.messageId))
+        if (fresh.length === 0) return state
+        // history가 과거순으로 오므로 기존 메시지와 합쳐 시간순 정렬 유지
+        const merged = [...state.messages, ...fresh].sort((a, b) => a.sentAt - b.sentAt)
+        return { messages: merged }
+      })
+    } catch (err) {
+      console.warn('Failed to load recent room messages:', err)
+    }
+  },
+
   addMessage: (msg) => {
+    const incoming = normalizeMessage(msg as RawChatMessage)
     set((state) => {
-      // clientRequestId가 있으면 기존 pending 메시지 confirmed로 교체
-      if (msg.clientRequestId) {
+      if (incoming.clientRequestId) {
         const index = state.messages.findIndex(
-          (m) => m.clientRequestId === msg.clientRequestId || m.messageId === msg.messageId
+          (m) => m.clientRequestId === incoming.clientRequestId || m.messageId === incoming.messageId
         )
         if (index >= 0) {
           const updated = [...state.messages]
-          updated[index] = { ...msg, status: 'confirmed' }
+          updated[index] = { ...incoming, status: 'confirmed' }
           return { messages: updated }
         }
+      } else if (state.messages.some((m) => m.messageId === incoming.messageId)) {
+        // 대화 내역 복원분과 실시간 수신 중복 제거 (ID 기준)
+        return state
       }
-      return { messages: [...state.messages, { ...msg, status: 'confirmed' }] }
+      return { messages: [...state.messages, { ...incoming, status: 'confirmed' }] }
     })
   },
 
@@ -145,8 +189,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
     const subChat = client.subscribe(`/topic/room/${roomId}/chat`, (message) => {
       try {
-        const chatMsg: ChatMessage = JSON.parse(message.body)
-        get().addMessage(chatMsg)
+        const raw: RawChatMessage = JSON.parse(message.body)
+        get().addMessage(raw as unknown as ChatMessage)
       } catch (err) {
         console.error('Failed to parse chat message:', err)
       }

@@ -24,6 +24,7 @@ public class RoomMapper {
     public static final String PERMANENT_BAN_KEY_PREFIX = "room:%s:banned";
     public static final String TEMPORARY_BAN_KEY_PREFIX = "room:%s:banned:%s";
     public static final String VOICE_KEY_PREFIX = "room:%s:voice";
+    public static final String CHAT_MESSAGES_KEY_PREFIX = "room:%s:messages";
     public static final String TAG_INDEX_PREFIX = "tag:%s:rooms";
     public static final String GAME_INDEX_PREFIX = "game:%s:rooms";
     public static final String INVITE_KEY_PREFIX = "invite:%s";
@@ -65,6 +66,10 @@ public class RoomMapper {
 
     public String voiceKey(String roomId) {
         return VOICE_KEY_PREFIX.formatted(roomId);
+    }
+
+    public String chatMessagesKey(String roomId) {
+        return CHAT_MESSAGES_KEY_PREFIX.formatted(roomId);
     }
 
     public String inviteKey(String code) {
@@ -213,7 +218,8 @@ public class RoomMapper {
                         joinedAtKey(roomId),
                         voiceKey(roomId),
                         permanentBanKey(roomId),
-                        roomInviteKey(roomId)
+                        roomInviteKey(roomId),
+                        chatMessagesKey(roomId)
                 ),
                 args.toArray());
         if (result != null && result == 1L) {
@@ -239,7 +245,8 @@ public class RoomMapper {
                         joinedAtKey(roomId),
                         voiceKey(roomId),
                         permanentBanKey(roomId),
-                        roomInviteKey(roomId)
+                        roomInviteKey(roomId),
+                        chatMessagesKey(roomId)
                 ),
                 args.toArray());
         deleteByScan("room:" + roomId + ":banned:*");

@@ -7,6 +7,7 @@
 -- KEYS[4]: room:{id}:voice
 -- KEYS[5]: room:{id}:banned
 -- KEYS[6]: room:{id}:invite (방 ID -> 초대코드 역방향 매핑)
+-- KEYS[7]: room:{id}:messages (채팅 대화 내역 캐시 List)
 --
 -- ARGV[1]: roomId
 -- ARGV[2]: game (정규화 전 원본 게임명, 소문자 처리는 Lua 내부에서 수행)
@@ -29,5 +30,5 @@ for i = 3, #ARGV do
 end
 
 -- 3. 방에 속한 모든 핵심 키 일괄 삭제
-redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6])
+redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7])
 return 1

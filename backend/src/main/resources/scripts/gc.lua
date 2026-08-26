@@ -6,6 +6,7 @@
 -- KEYS[4]: room:{id}:voice
 -- KEYS[5]: room:{id}:banned
 -- KEYS[6]: room:{id}:invite
+-- KEYS[7]: room:{id}:messages (채팅 대화 내역 캐시 List)
 -- ARGV[1]: roomId
 -- ARGV[2]: game
 -- ARGV[3..]: tags
@@ -32,5 +33,5 @@ for i = 3, #ARGV do
     end
 end
 
-redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6])
+redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7])
 return 1
