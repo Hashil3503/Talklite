@@ -17,6 +17,7 @@ export interface VoiceAudioEngine {
   destroy(): void
   getProcessedStream(): MediaStream | null
   getContextState(): AudioContextState | null
+  getAnalyser(): AnalyserNode | null
 }
 
 interface PeerOutput {
@@ -32,6 +33,7 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   private compressor: DynamicsCompressorNode | null = null
   private destination: MediaStreamAudioDestinationNode | null = null
   private masterGain: GainNode | null = null
+  private analyser: AnalyserNode | null = null
   private peerMap = new Map<string, PeerOutput>()
   // @ts-ignore TS6133: kept for lifecycle parity (hot-swap tracking)
   private rawInputStream: MediaStream | null = null
@@ -64,13 +66,20 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     const destination = ctx.createMediaStreamDestination()
     this.destination = destination
 
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 256
+    analyser.smoothingTimeConstant = 0.8
+    this.analyser = analyser
+
     const masterGain = ctx.createGain()
     masterGain.gain.value = this.isDeafened ? 0 : this.currentMasterVolume
     masterGain.connect(ctx.destination)
     this.masterGain = masterGain
 
     // Connect inputGain -> compressor -> destination (source connects later)
+    // Analyser taps off inputGain in parallel (VU meter does not affect compressed stream)
     inputGain.connect(compressor)
+    inputGain.connect(analyser)
     compressor.connect(destination)
 
     return ctx
@@ -93,7 +102,7 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     }
 
     // (Re)create nodes if they were destroyed
-    if (!this.inputGain || !this.compressor || !this.destination) {
+    if (!this.inputGain || !this.compressor || !this.destination || !this.analyser) {
       // Should not happen if ctx existed but nodes cleared — recreate
       const inputGain = ctx.createGain()
       inputGain.gain.value = this.currentInputGain
@@ -107,7 +116,15 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
       this.compressor = compressor
       const dest = ctx.createMediaStreamDestination()
       this.destination = dest
+      if (!this.analyser) {
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = 256
+        analyser.smoothingTimeConstant = 0.8
+        this.analyser = analyser
+      }
+      const analyserNode = this.analyser!
       inputGain.connect(compressor)
+      inputGain.connect(analyserNode)
       compressor.connect(dest)
       if (!this.masterGain) {
         const mg = ctx.createGain()
@@ -263,6 +280,10 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     return this.ctx ? this.ctx.state : null
   }
 
+  getAnalyser(): AnalyserNode | null {
+    return this.analyser
+  }
+
   destroy(): void {
     // Disconnect & clear peer outputs
     for (const [, entry] of this.peerMap) {
@@ -302,6 +323,14 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
         // ignore
       }
       this.compressor = null
+    }
+    if (this.analyser) {
+      try {
+        this.analyser.disconnect()
+      } catch {
+        // ignore
+      }
+      this.analyser = null
     }
     if (this.masterGain) {
       try {

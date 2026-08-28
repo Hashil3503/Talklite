@@ -2,6 +2,47 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useVoiceStore } from '../../store/voiceStore'
 import { getUid } from '../../store/voiceStore'
 
+const VuMeter: React.FC = () => {
+  const meterRef = useRef<HTMLDivElement>(null)
+  const fillRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let previousLevel = -1
+    const update = (level: number): void => {
+      const normalized = Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0
+      if (normalized === previousLevel) return
+      previousLevel = normalized
+      const percent = `${Math.round(normalized * 100)}%`
+      fillRef.current?.style.setProperty('width', percent)
+      meterRef.current?.setAttribute('aria-valuenow', String(Math.round(normalized * 100)))
+      meterRef.current?.setAttribute('aria-valuetext', percent)
+    }
+
+    update(useVoiceStore.getState().micVolumeLevel)
+    return useVoiceStore.subscribe((state) => update(state.micVolumeLevel))
+  }, [])
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-xs font-semibold text-zinc-300">VU 레벨</span>
+      </div>
+      <div
+        ref={meterRef}
+        role="meter"
+        aria-label="마이크 VU 레벨"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={0}
+        aria-valuetext="0%"
+        className="h-2 w-full overflow-hidden rounded-sm bg-zinc-800"
+      >
+        <div ref={fillRef} className="h-full w-0 rounded-sm bg-emerald-500 transition-[width] duration-75" />
+      </div>
+    </div>
+  )
+}
+
 export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const isInVoice = useVoiceStore((state) => state.isInVoice)
   const isMuted = useVoiceStore((state) => state.isMuted)
@@ -13,6 +54,10 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const isAudioAutoplayBlocked = useVoiceStore((state) => state.isAudioAutoplayBlocked)
   const inputGain = useVoiceStore((state) => state.inputGain)
   const masterVolume = useVoiceStore((state) => state.masterVolume)
+  const inputMode = useVoiceStore((state) => state.inputMode)
+  const pttKey = useVoiceStore((state) => state.pttKey)
+  const isPttActive = useVoiceStore((state) => state.isPttActive)
+  const isTestingMic = useVoiceStore((state) => state.isTestingMic)
   const joinVoice = useVoiceStore((state) => state.joinVoice)
   const leaveVoice = useVoiceStore((state) => state.leaveVoice)
   const toggleMute = useVoiceStore((state) => state.toggleMute)
@@ -21,9 +66,14 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const unlockAudio = useVoiceStore((state) => state.unlockAudio)
   const setInputGain = useVoiceStore((state) => state.setInputGain)
   const setMasterVolume = useVoiceStore((state) => state.setMasterVolume)
+  const setInputMode = useVoiceStore((state) => state.setInputMode)
+  const setPttKey = useVoiceStore((state) => state.setPttKey)
+  const startMicTest = useVoiceStore((state) => state.startMicTest)
+  const stopMicTest = useVoiceStore((state) => state.stopMicTest)
 
   const [showInput, setShowInput] = useState(false)
   const [showMaster, setShowMaster] = useState(false)
+  const [isCapturing, setIsCapturing] = useState(false)
   const inputRef = useRef<HTMLDivElement>(null)
   const masterRef = useRef<HTMLDivElement>(null)
 
@@ -31,7 +81,6 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const meTalking = !!speaking[me]
   const inputPercent = Math.round(inputGain * 100)
   const masterPercent = Math.round(masterVolume * 100)
-
   useEffect(() => {
     if (!showInput && !showMaster) return
     const onClick = (e: MouseEvent): void => {
@@ -52,6 +101,32 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
       document.removeEventListener('keydown', onKey)
     }
   }, [showInput, showMaster])
+
+  useEffect(() => {
+    if (!isCapturing) return
+    const onKeyDown = (e: KeyboardEvent): void => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.code) {
+        setPttKey(e.code)
+        setIsCapturing(false)
+      }
+    }
+    const onBlur = (): void => setIsCapturing(false)
+    window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [isCapturing, setPttKey])
+
+  const formatPttKey = (code: string): string => {
+    if (code === 'Space') return 'Space'
+    if (code.startsWith('Key')) return code.slice(3)
+    if (code.startsWith('Digit')) return code.slice(5)
+    return code
+  }
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center">
@@ -78,6 +153,9 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
             <span className="text-sm font-semibold text-white whitespace-nowrap">
               🎙️ {voiceMembers.length}명{' '}
               {meTalking && <span className="text-emerald-400 animate-pulse">●</span>}
+              {inputMode === 'push_to_talk' && isPttActive && (
+                <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 border border-emerald-700">PTT 열림</span>
+              )}
             </span>
 
             <button
@@ -100,12 +178,12 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
               {isDeafened ? '🔕' : '🔊'}
             </button>
 
-            {/* 마이크 입력 게인 팝오버 */}
+            {/* 마이크 설정 팝오버 — Phase 9 확장: VU + 테스트 + PTT */}
             <div ref={inputRef} className="relative">
               <button
                 onClick={() => setShowInput((v) => !v)}
-                title="마이크 입력 게인"
-                aria-label="마이크 입력 게인 설정"
+                title="마이크 설정"
+                aria-label="마이크 설정"
                 aria-expanded={showInput}
                 className={`px-3 py-2 rounded-full text-xs font-semibold transition-colors ${
                   showInput ? 'bg-zinc-700 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
@@ -114,33 +192,95 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
                 🎛️ {inputPercent}%
               </button>
               {showInput && (
-                <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-48 rounded-xl border border-zinc-700 bg-zinc-900 p-3 shadow-2xl">
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-zinc-300">마이크 입력</span>
-                    <span className="text-xs font-mono text-emerald-400">{inputPercent}%</span>
+                <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-64 rounded-xl border border-zinc-700 bg-zinc-900 p-3 shadow-2xl space-y-3">
+                  {/* 입력 게인 */}
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-300">마이크 입력</span>
+                      <span className="text-xs font-mono text-emerald-400">{inputPercent}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={200}
+                      step={5}
+                      value={inputPercent}
+                      onChange={(e) => {
+                        const next = Number(e.target.value)
+                        if (!Number.isFinite(next)) return
+                        setInputGain(next / 100)
+                      }}
+                      aria-label="마이크 입력 게인"
+                      aria-valuemin={0}
+                      aria-valuemax={200}
+                      aria-valuenow={inputPercent}
+                      aria-valuetext={`${inputPercent}%`}
+                      className="w-full accent-emerald-500"
+                    />
+                    <div className="mt-1 flex justify-between text-[10px] text-zinc-500">
+                      <span>0%</span>
+                      <span>100%</span>
+                      <span>200%</span>
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={200}
-                    step={5}
-                    value={inputPercent}
-                    onChange={(e) => {
-                      const next = Number(e.target.value)
-                      if (!Number.isFinite(next)) return
-                      setInputGain(next / 100)
+
+                  <VuMeter />
+
+                  {/* 3초 마이크 테스트 */}
+                  <button
+                    onClick={() => {
+                      if (isTestingMic) void stopMicTest()
+                      else void startMicTest()
                     }}
-                    aria-label="마이크 입력 게인"
-                    aria-valuemin={0}
-                    aria-valuemax={200}
-                    aria-valuenow={inputPercent}
-                    aria-valuetext={`${inputPercent}%`}
-                    className="w-full accent-emerald-500"
-                  />
-                  <div className="mt-1 flex justify-between text-[10px] text-zinc-500">
-                    <span>0%</span>
-                    <span>100%</span>
-                    <span>200%</span>
+                    className={`w-full rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                      isTestingMic ? 'bg-amber-900/60 text-amber-200 border border-amber-700' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
+                    }`}
+                  >
+                    {isTestingMic ? '⏹️ 테스트 중지 (3초 녹음·재생)' : '🎤 3초 마이크 테스트'}
+                  </button>
+
+                  {/* 입력 모드 */}
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2">
+                    <div className="mb-1 text-xs font-semibold text-zinc-300">입력 모드</div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setInputMode('voice_activity')}
+                        aria-pressed={inputMode === 'voice_activity'}
+                        className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
+                          inputMode === 'voice_activity' ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        음성 감지
+                      </button>
+                      <button
+                        onClick={() => setInputMode('push_to_talk')}
+                        aria-pressed={inputMode === 'push_to_talk'}
+                        className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
+                          inputMode === 'push_to_talk' ? 'bg-sky-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        PTT
+                      </button>
+                    </div>
+                    {inputMode === 'push_to_talk' && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-xs text-zinc-400">단축키:</span>
+                        <span className="rounded bg-zinc-800 px-2 py-1 text-xs font-mono text-sky-300 border border-zinc-700">
+                          {formatPttKey(pttKey)}
+                        </span>
+                        <button
+                          onClick={() => setIsCapturing((v) => !v)}
+                          className={`ml-auto rounded px-2 py-1 text-xs font-semibold border transition-colors ${
+                            isCapturing ? 'bg-amber-900/60 text-amber-200 border-amber-700' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'
+                          }`}
+                        >
+                          {isCapturing ? '키 입력 대기...' : '변경'}
+                        </button>
+                      </div>
+                    )}
+                    {inputMode === 'push_to_talk' && (
+                      <p className="mt-1 text-[10px] leading-tight text-zinc-500">PTT 모드에서는 {formatPttKey(pttKey)}를 누르고 있을 때만 마이크가 열립니다. Alt-Tab 시 자동 차단됩니다.</p>
+                    )}
                   </div>
                 </div>
               )}

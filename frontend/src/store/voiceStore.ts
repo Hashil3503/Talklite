@@ -19,10 +19,23 @@ let engine: VoiceAudioEngineImpl | null = null
 const LS_INPUT_GAIN = 'talklite_input_gain'
 const LS_MASTER_VOLUME = 'talklite_master_volume'
 const LS_USER_VOLUMES = 'talklite_user_volumes'
+const LS_INPUT_MODE = 'talklite_input_mode'
+const LS_PTT_KEY = 'talklite_ptt_key'
 
 let inputGainTimer: ReturnType<typeof setTimeout> | null = null
 let masterTimer: ReturnType<typeof setTimeout> | null = null
 let peerVolumesTimer: ReturnType<typeof setTimeout> | null = null
+
+// ── Phase 9 PTT & MicTest globals
+let pttReleaseTimer: ReturnType<typeof setTimeout> | null = null
+let mediaRecorder: MediaRecorder | null = null
+let micTestChunks: Blob[] = []
+let micTestStream: MediaStream | null = null
+let micTestUrl: string | null = null
+let micTestAudio: HTMLAudioElement | null = null
+let micTestTimeout: ReturnType<typeof setTimeout> | null = null
+let micTestAborted = false
+let supportedMimeTypeCache: string | null = null
 
 function clampInputGain(v: number): number {
   return Math.min(2, Math.max(0, v))
@@ -78,6 +91,27 @@ function loadPeerVolumes(): Record<string, number> {
   return {}
 }
 
+export type VoiceInputMode = 'voice_activity' | 'push_to_talk'
+
+function loadInputMode(): VoiceInputMode {
+  try {
+    const raw = localStorage.getItem(LS_INPUT_MODE)
+    if (raw === 'push_to_talk' || raw === 'voice_activity') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'voice_activity'
+}
+function loadPttKey(): string {
+  try {
+    const raw = localStorage.getItem(LS_PTT_KEY)
+    if (raw && typeof raw === 'string' && raw.length > 0) return raw
+  } catch {
+    /* ignore */
+  }
+  return 'KeyT'
+}
+
 function debouncedSaveInputGain(value: number): void {
   if (inputGainTimer) clearTimeout(inputGainTimer)
   inputGainTimer = setTimeout(() => {
@@ -121,7 +155,6 @@ export function getUid(): string {
 function attachRemoteAudio(peerId: string, stream: MediaStream): void {
   const eng = ensureEngine()
   eng.attachRemote(peerId, stream)
-  // 적용: 스마트 영구 기억 볼륨
   const state = useVoiceStore.getState()
   const savedVol = state.peerVolumes[peerId]
   if (savedVol !== undefined) {
@@ -130,7 +163,6 @@ function attachRemoteAudio(peerId: string, stream: MediaStream): void {
   if (state.peerMutes[peerId]) {
     eng.setPeerVolume(peerId, 0)
   }
-  // Autoplay 차단 감지
   if (eng.getContextState() === 'suspended') {
     useVoiceStore.setState({ isAudioAutoplayBlocked: true })
   }
@@ -143,18 +175,107 @@ async function unlockAudio(): Promise<void> {
     return
   }
   const ok = await eng.resume()
-  useVoiceStore.setState({ isAudioAutoplayBlocked: !ok && eng.getContextState() === 'suspended' })
+  useVoiceStore.setState({ isAudioAutoplayBlocked: !ok })
 }
 
 function removePeerAudio(peerId: string): void {
   engine?.removeRemote(peerId)
 }
 
+function getSupportedMimeType(): string {
+  if (supportedMimeTypeCache !== null) return supportedMimeTypeCache
+  const candidates = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg']
+  if (typeof MediaRecorder === 'undefined') {
+    supportedMimeTypeCache = ''
+    return supportedMimeTypeCache
+  }
+  for (const candidate of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(candidate)) {
+        supportedMimeTypeCache = candidate
+        return candidate
+      }
+    } catch {
+      continue
+    }
+  }
+  supportedMimeTypeCache = ''
+  return supportedMimeTypeCache
+}
+
+function createMicTestRecorder(stream: MediaStream): MediaRecorder {
+  if (typeof MediaRecorder === 'undefined') {
+    throw new Error('MediaRecorder is not supported in this browser')
+  }
+  const candidates = [
+    getSupportedMimeType(),
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+    '',
+  ].filter((value, index, values) => values.indexOf(value) === index)
+  let lastError: unknown = new Error('MediaRecorder is not supported')
+
+  for (const mimeType of candidates) {
+    try {
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      supportedMimeTypeCache = mimeType
+      return recorder
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError
+}
+
+function cleanupMicTestInternal(): void {
+  if (micTestTimeout) {
+    clearTimeout(micTestTimeout)
+    micTestTimeout = null
+  }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try {
+      mediaRecorder.stop()
+    } catch {
+      // ignore
+    }
+  }
+  mediaRecorder = null
+  micTestChunks = []
+  if (micTestStream) {
+    micTestStream.getTracks().forEach((t) => t.stop())
+    micTestStream = null
+  }
+  if (micTestAudio) {
+    try {
+      micTestAudio.pause()
+      micTestAudio.src = ''
+    } catch {
+      // ignore
+    }
+    micTestAudio = null
+  }
+  if (micTestUrl) {
+    try {
+      URL.revokeObjectURL(micTestUrl)
+    } catch {
+      // ignore
+    }
+    micTestUrl = null
+  }
+}
+
 function cleanupVoiceResources(): void {
+  micTestAborted = true
   manager?.destroy()
   manager = null
   detector?.stop()
   detector = null
+  cleanupMicTestInternal()
   if (rawMicStream) {
     rawMicStream.getTracks().forEach((t) => t.stop())
     rawMicStream = null
@@ -162,21 +283,112 @@ function cleanupVoiceResources(): void {
   engine?.destroy()
   engine = null
   wasInVoice = false
+  // PTT 릴리즈 타이머 정리 (Stuck 해제)
+  if (pttReleaseTimer) {
+    clearTimeout(pttReleaseTimer)
+    pttReleaseTimer = null
+  }
+}
+
+function applyTransmitState(): void {
+  const s = useVoiceStore.getState()
+  const shouldTransmit = !s.isMuted && (s.inputMode === 'voice_activity' || s.isPttActive)
+  const proc = engine?.getProcessedStream()
+  const track = proc?.getAudioTracks()[0] ?? rawMicStream?.getAudioTracks()[0] ?? null
+  if (track) {
+    track.enabled = shouldTransmit
+  }
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (target instanceof HTMLElement) {
+    const tag = target.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+    if (target.isContentEditable) return true
+    if (target.closest('[contenteditable]')) return true
+  }
+  return false
+}
+
+function handlePttKeyDown(e: KeyboardEvent): void {
+  const { inputMode, pttKey, isPttActive } = useVoiceStore.getState()
+  if (inputMode !== 'push_to_talk') return
+  if (e.code !== pttKey) return
+  if (e.repeat) return
+  if (e.isComposing) return
+  if (isTypingTarget(e.target)) return
+  if (isPttActive) return
+  if (pttReleaseTimer) {
+    clearTimeout(pttReleaseTimer)
+    pttReleaseTimer = null
+  }
+  useVoiceStore.setState({ isPttActive: true })
+  applyTransmitState()
+}
+
+function handlePttKeyUp(e: KeyboardEvent): void {
+  const { inputMode, pttKey } = useVoiceStore.getState()
+  if (inputMode !== 'push_to_talk') return
+  if (e.code !== pttKey) return
+  if (pttReleaseTimer) clearTimeout(pttReleaseTimer)
+  pttReleaseTimer = setTimeout(() => {
+    pttReleaseTimer = null
+    const s = useVoiceStore.getState()
+    if (!s.isPttActive) return
+    useVoiceStore.setState({ isPttActive: false })
+    applyTransmitState()
+  }, 200)
+}
+
+function handlePttStuckRelease(): void {
+  if (pttReleaseTimer) {
+    clearTimeout(pttReleaseTimer)
+    pttReleaseTimer = null
+  }
+  const s = useVoiceStore.getState()
+  if (s.isPttActive) {
+    useVoiceStore.setState({ isPttActive: false })
+    applyTransmitState()
+  }
 }
 
 function startDetector(roomId: string): void {
   detector?.stop()
-  detector = new AudioDetector({
-    onTalkingChange: (talking) => {
-      if (useVoiceStore.getState().isMuted) return
-      stompClient?.publish({
-        destination: `/app/room/${roomId}/speaker`,
-        body: JSON.stringify({ talking }),
-      })
-    },
-  })
-  const streamForDetector = engine?.getProcessedStream() ?? rawMicStream ?? null
-  if (streamForDetector) {
+  const analyser = engine?.getAnalyser() ?? null
+  if (analyser) {
+    detector = new AudioDetector({
+      threshold: 0.02,
+      hangoverMs: 300,
+      onTalkingChange: (talking) => {
+        if (useVoiceStore.getState().isMuted) return
+        stompClient?.publish({
+          destination: `/app/room/${roomId}/speaker`,
+          body: JSON.stringify({ talking }),
+        })
+      },
+      onVuLevel: (level) => {
+        useVoiceStore.setState({ micVolumeLevel: level })
+      },
+      analyser,
+    })
+    detector.startWithAnalyser(analyser)
+  } else {
+    const streamForDetector = engine?.getProcessedStream() ?? rawMicStream ?? null
+    if (!streamForDetector) return
+    detector = new AudioDetector({
+      threshold: 0.02,
+      hangoverMs: 300,
+      onTalkingChange: (talking) => {
+        if (useVoiceStore.getState().isMuted) return
+        stompClient?.publish({
+          destination: `/app/room/${roomId}/speaker`,
+          body: JSON.stringify({ talking }),
+        })
+      },
+      onVuLevel: (level) => {
+        useVoiceStore.setState({ micVolumeLevel: level })
+      },
+    })
     detector.start(streamForDetector)
   }
 }
@@ -195,6 +407,13 @@ interface VoiceState {
   masterVolume: number
   peerVolumes: Record<string, number>
   peerMutes: Record<string, boolean>
+  // Phase 9
+  inputMode: VoiceInputMode
+  pttKey: string
+  isPttActive: boolean
+  isTestingMic: boolean
+  micVolumeLevel: number
+  micTestUrl: string | null
 
   connectRoomVoice: (roomId: string) => Promise<void>
   disconnectRoomVoice: () => void
@@ -211,6 +430,11 @@ interface VoiceState {
   setMasterVolume: (value: number) => void
   setPeerVolume: (peerId: string, value: number) => void
   togglePeerMute: (peerId: string) => void
+  // Phase 9 setters
+  setInputMode: (mode: VoiceInputMode) => void
+  setPttKey: (code: string) => void
+  startMicTest: () => Promise<void>
+  stopMicTest: () => void
 }
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
@@ -226,6 +450,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   masterVolume: loadMasterVolume(),
   peerVolumes: loadPeerVolumes(),
   peerMutes: {},
+  inputMode: loadInputMode(),
+  pttKey: loadPttKey(),
+  isPttActive: false,
+  isTestingMic: false,
+  micVolumeLevel: 0,
+  micTestUrl: null,
 
   connectRoomVoice: async (roomId: string) => {
     speakerUnsub?.unsubscribe()
@@ -261,7 +491,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
     cleanupVoiceResources()
     activeRoomId = null
-    set({ isInVoice: false, isMuted: false, isDeafened: false, voiceMembers: [], speakingUsers: {} })
+    set({ isInVoice: false, isMuted: false, isDeafened: false, voiceMembers: [], speakingUsers: {}, isPttActive: false, micVolumeLevel: 0 })
   },
 
   forceDisconnectVoice: () => {
@@ -269,7 +499,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     speakerUnsub = null
     cleanupVoiceResources()
     activeRoomId = null
-    set({ isInVoice: false, isMuted: false, isDeafened: false, voiceMembers: [], speakingUsers: {} })
+    set({ isInVoice: false, isMuted: false, isDeafened: false, voiceMembers: [], speakingUsers: {}, isPttActive: false, micVolumeLevel: 0 })
   },
 
   joinVoice: async (roomId: string) => {
@@ -304,29 +534,30 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       rawMicStream = rawStream
 
       const eng = ensureEngine()
-      // 초기 볼륨 주입
       const { inputGain, masterVolume } = get()
       eng.setInputGain(inputGain)
       eng.setMasterVolume(masterVolume)
       eng.setDeafened(get().isDeafened)
 
       const processed = eng.initializeInput(rawStream)
-      // Mute 상태면 processed track을 즉시 무음화
-      if (get().isMuted) {
-        processed.getAudioTracks().forEach((t) => {
-          t.enabled = false
-        })
-      }
+      // 초기 송신 상태 적용 (PTT 모드면 무음, voice_activity면 송신)
+      applyTransmitState()
+      // Mute 상태 동기화 보조: applyTransmitState가 이미 처리하지만, 초기 false 보장
+      const shouldTransmit = !get().isMuted && (get().inputMode === 'voice_activity' || get().isPttActive)
+      processed.getAudioTracks().forEach((t) => {
+        t.enabled = shouldTransmit
+      })
 
       manager.setLocalStream(processed)
       startDetector(roomId)
       stompClient.publish({ destination: `/app/room/${roomId}/voice/start`, body: '{}' })
-      // Autoplay 상태 체크
       if (eng.getContextState() === 'suspended') {
         set({ isInVoice: true, isMuted: false, isDeafened: false, error: null, isAudioAutoplayBlocked: true })
       } else {
         set({ isInVoice: true, isMuted: false, isDeafened: false, error: null, isAudioAutoplayBlocked: false })
       }
+      // 재적용 (isMuted 리셋 후)
+      applyTransmitState()
     } catch (err: unknown) {
       console.error('[voice] join failed:', err)
       cleanupVoiceResources()
@@ -341,22 +572,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
     cleanupVoiceResources()
     activeRoomId = null
-    set({ isInVoice: false, isMuted: false, isDeafened: false, voiceMembers: [], speakingUsers: {} })
+    set({ isInVoice: false, isMuted: false, isDeafened: false, voiceMembers: [], speakingUsers: {}, isPttActive: false, micVolumeLevel: 0, isTestingMic: false })
   },
 
   toggleMute: () => {
     const next = !useVoiceStore.getState().isMuted
-    const processed = engine?.getProcessedStream()
-    if (processed) {
-      processed.getAudioTracks().forEach((t) => {
-        t.enabled = !next
-      })
-    } else {
-      rawMicStream?.getAudioTracks().forEach((t) => {
-        t.enabled = !next
-      })
-    }
     set({ isMuted: next })
+    applyTransmitState()
   },
 
   toggleDeafen: () => {
@@ -377,19 +599,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
         },
       })
-      // Hot-swap: Destination 노드는 유지, Source만 교체
       const processed = eng.replaceInput(newRaw)
-      // 이전 raw 정리
       rawMicStream.getAudioTracks().forEach((t) => t.stop())
       rawMicStream = newRaw
-      // Mute 상태면 processed track 유지
-      if (get().isMuted) {
-        processed.getAudioTracks().forEach((t) => {
-          t.enabled = false
-        })
-      }
-      // WebRTC sender는 processed track이 동일하므로 replace 불필요하지만, 안전하게 동기화
-      // processed가 동일 객체이므로 실제 replace는 no-op에 가깝다
+      applyTransmitState()
+      // processed가 동일 객체지만 enabled 상태 보정
+      const should = !get().isMuted && (get().inputMode === 'voice_activity' || get().isPttActive)
+      processed.getAudioTracks().forEach((t) => {
+        t.enabled = should
+      })
       await manager.replaceLocalStream(processed)
       startDetector(activeRoomId)
     } catch {
@@ -410,7 +628,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (!meInVoice) {
       cleanupVoiceResources()
       manager = null
-      set({ isInVoice: false, isMuted: false, isDeafened: false })
+      set({ isInVoice: false, isMuted: false, isDeafened: false, isPttActive: false, micVolumeLevel: 0 })
       return
     }
 
@@ -448,7 +666,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (!Number.isFinite(value)) return
     const clamped = clampPeerVolume(value)
     const isMuted = get().peerMutes[peerId]
-    // 실제 게인은 뮤트면 0, 아니면 clamped
     const effective = isMuted ? 0 : clamped
     engine?.setPeerVolume(peerId, effective)
     set((state) => {
@@ -468,4 +685,126 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       peerMutes: { ...s.peerMutes, [peerId]: nextMuted },
     }))
   },
+
+  setInputMode: (mode: VoiceInputMode) => {
+    if (mode !== 'voice_activity' && mode !== 'push_to_talk') return
+    set({ inputMode: mode })
+    try {
+      localStorage.setItem(LS_INPUT_MODE, mode)
+    } catch {
+      // ignore
+    }
+    if (mode === 'voice_activity') {
+      // PTT 해제
+      if (pttReleaseTimer) {
+        clearTimeout(pttReleaseTimer)
+        pttReleaseTimer = null
+      }
+      set({ isPttActive: false })
+    }
+    applyTransmitState()
+  },
+
+  setPttKey: (code: string) => {
+    if (!code || typeof code !== 'string') return
+    const trimmed = code.trim()
+    if (!trimmed) return
+    set({ pttKey: trimmed })
+    try {
+      localStorage.setItem(LS_PTT_KEY, trimmed)
+    } catch {
+      // ignore
+    }
+  },
+
+  startMicTest: async () => {
+    const s = get()
+    if (s.isTestingMic) return
+    // 기존 테스트 정리
+    micTestAborted = true
+    cleanupMicTestInternal()
+    micTestAborted = false
+    set({ isTestingMic: true, micTestUrl: null })
+
+    let stream: MediaStream | null = null
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
+      micTestStream = stream
+      const recorder = createMicTestRecorder(stream)
+      mediaRecorder = recorder
+      micTestChunks = []
+
+      recorder.ondataavailable = (e: BlobEvent) => {
+        if (e.data.size > 0) micTestChunks.push(e.data)
+      }
+
+      recorder.onstop = () => {
+        if (micTestAborted) {
+          cleanupMicTestInternal()
+          useVoiceStore.setState({ isTestingMic: false, micTestUrl: null })
+          return
+        }
+        try {
+          const blob = new Blob(micTestChunks, { type: recorder.mimeType || 'audio/webm' })
+          const url = URL.createObjectURL(blob)
+          micTestUrl = url
+          const audio = new Audio(url)
+          micTestAudio = audio
+          useVoiceStore.setState({ micTestUrl: url })
+          const onDone = (): void => {
+            cleanupMicTestInternal()
+            useVoiceStore.setState({ isTestingMic: false, micTestUrl: null })
+          }
+          audio.onended = onDone
+          audio.onerror = onDone
+          void audio.play().catch(() => onDone())
+        } catch {
+          cleanupMicTestInternal()
+          useVoiceStore.setState({ isTestingMic: false, micTestUrl: null })
+        }
+      }
+
+      recorder.start()
+
+      micTestTimeout = setTimeout(() => {
+        try {
+          if (recorder.state === 'recording') recorder.stop()
+        } catch {
+          // ignore
+        }
+      }, 3000)
+    } catch (err) {
+      console.error('[micTest] failed', err)
+      cleanupMicTestInternal()
+      set({ isTestingMic: false, micTestUrl: null })
+    }
+  },
+
+  stopMicTest: () => {
+    micTestAborted = true
+    cleanupMicTestInternal()
+    set({ isTestingMic: false, micTestUrl: null })
+  },
 }))
+
+function handleVisibilityChange(): void {
+  if (document.hidden) handlePttStuckRelease()
+}
+
+// ── PTT 전역 리스너 (스토어 생성 후 등록 — TDZ 회피)
+if (typeof window !== 'undefined') {
+  window.removeEventListener('keydown', handlePttKeyDown)
+  window.removeEventListener('keyup', handlePttKeyUp)
+  window.removeEventListener('blur', handlePttStuckRelease)
+  window.removeEventListener('pagehide', handlePttStuckRelease)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  document.removeEventListener('contextmenu', handlePttStuckRelease)
+  window.addEventListener('keydown', handlePttKeyDown)
+  window.addEventListener('keyup', handlePttKeyUp)
+  window.addEventListener('blur', handlePttStuckRelease)
+  window.addEventListener('pagehide', handlePttStuckRelease)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  document.addEventListener('contextmenu', handlePttStuckRelease)
+}
