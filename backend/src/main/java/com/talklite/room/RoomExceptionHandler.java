@@ -1,5 +1,6 @@
 package com.talklite.room;
 
+import com.talklite.auth.UnauthorizedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -51,6 +52,12 @@ public class RoomExceptionHandler {
     public ResponseEntity<Map<String, String>> invalidInvite(InvalidInviteCodeException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "invite_invalid"));
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    ResponseEntity<Map<String, String>> authRequired(UnauthorizedException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "unauthorized"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -220,6 +220,15 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       return
     }
 
+    const currentUserId = localStorage.getItem('talklite_uid') || 'anonymous'
+    if (event.type === 'MEMBER_KICKED' && event.targetUser === currentUserId) {
+      useVoiceStore.getState().forceDisconnectVoice()
+      get().disconnectRoomStomp()
+      set({ currentRoom: null, messages: [], voiceMembers: [] })
+      window.dispatchEvent(new CustomEvent('talklite:kicked', { detail: event }))
+      return
+    }
+
     if (event.type === 'MEMBER_JOIN' && event.actor) {
       const members = Array.from(new Set([...currentRoom.members, event.actor])).sort()
       set({

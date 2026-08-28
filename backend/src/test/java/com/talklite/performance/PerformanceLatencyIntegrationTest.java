@@ -65,6 +65,7 @@ public class PerformanceLatencyIntegrationTest extends IntegrationTestCleanup {
         int totalRequests = 500;
 
         String json = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("perf-host"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest("Overwatch", List.of("comp"), capacity, RoomScope.PUBLIC, RoomType.TEMPORARY, "perf-host"))))
                 .andExpect(status().isOk())
@@ -89,6 +90,7 @@ public class PerformanceLatencyIntegrationTest extends IntegrationTestCleanup {
                     startLatch.await();
                     long start = System.currentTimeMillis();
                     int statusCode = mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                                    .header("Authorization", tokenFor(user))
                                     .contentType(MediaType.APPLICATION_JSON)
                                     .content(objectMapper.writeValueAsString(new JoinRequest(user))))
                             .andReturn().getResponse().getStatus();

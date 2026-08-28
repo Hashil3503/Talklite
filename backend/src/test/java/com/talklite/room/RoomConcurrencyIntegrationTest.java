@@ -43,6 +43,7 @@ public class RoomConcurrencyIntegrationTest extends IntegrationTestCleanup {
                 "host-conc"
         );
         String responseContent = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("host-conc"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isOk())
@@ -64,6 +65,7 @@ public class RoomConcurrencyIntegrationTest extends IntegrationTestCleanup {
                     ready.countDown();
                     start.await();
                     int status = mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                                    .header("Authorization", tokenFor(user))
                                     .contentType(MediaType.APPLICATION_JSON)
                                     .content(objectMapper.writeValueAsString(new JoinRequest(user))))
                             .andReturn().getResponse().getStatus();

@@ -11,6 +11,7 @@ export const ChatLog: React.FC = () => {
     count: messages.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 64,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 64,
     overscan: 5,
   })
 

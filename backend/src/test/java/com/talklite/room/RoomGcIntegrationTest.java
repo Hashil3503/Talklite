@@ -65,6 +65,7 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
 
     private String createRoom(String game, List<String> tags, int capacity, RoomScope scope, RoomType type, String host) throws Exception {
         String json = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor(host))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(game, tags, capacity, scope, type, host))))
                 .andExpect(status().isOk())
@@ -81,6 +82,7 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
 
         // 초대코드 발급 (역방향 room:{id}:invite + invite:{code} 존재 확인)
         String inviteJson = mockMvc.perform(post("/api/rooms/" + roomId + "/invite")
+                        .header("Authorization", tokenFor("gc-host"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new InviteRequest("gc-host"))))
                 .andExpect(status().isOk())
@@ -89,6 +91,7 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
 
         // 방장(유일 인원) 퇴장 → 즉시 파기
         mockMvc.perform(post("/api/rooms/" + roomId + "/leave")
+                        .header("Authorization", tokenFor("gc-host"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("gc-host"))))
                 .andExpect(status().isOk());
@@ -98,6 +101,7 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
 
         // 2) 초대코드 무효화 (역방향 invite:{code} DEL)
         mockMvc.perform(post("/api/invite/" + code + "/join")
+                        .header("Authorization", tokenFor("gc-late"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("gc-late"))))
                 .andExpect(status().isNotFound());
@@ -117,6 +121,7 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
         String roomId = createRoom("Gc Persist", List.of("gc-perm"), 5, RoomScope.PUBLIC, RoomType.PERMANENT, "gc-perm-host");
 
         mockMvc.perform(post("/api/rooms/" + roomId + "/leave")
+                        .header("Authorization", tokenFor("gc-perm-host"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("gc-perm-host"))))
                 .andExpect(status().isOk());
@@ -142,6 +147,7 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
             try {
                 start.await();
                 mockMvc.perform(post("/api/rooms/" + roomId + "/leave")
+                                .header("Authorization", tokenFor("gc-race-host"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(new JoinRequest("gc-race-host"))));
             } catch (Exception ignored) {
@@ -156,6 +162,7 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
                 try {
                     start.await();
                     mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                            .header("Authorization", tokenFor(u))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(new JoinRequest(u))));
                 } catch (Exception ignored) {

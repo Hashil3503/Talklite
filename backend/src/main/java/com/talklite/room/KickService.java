@@ -17,12 +17,17 @@ public class KickService {
         this.eventPublisher = eventPublisher;
     }
 
-    public RoomResponse kick(String roomId, KickRequest request) {
+    public RoomResponse kick(String roomId, KickRequest request, String principal) {
         Room room = roomMapper.find(roomId);
         if (room == null) {
             throw new RoomNotFoundException(roomId);
         }
-        if (!room.host().equals(request.actor())) {
+        // DEF-01: principal이 방장인지 검증 — Body actor 스푸핑 차단
+        if (!room.host().equals(principal)) {
+            throw new UnauthorizedHostException();
+        }
+        // Body actor와 principal 불일치도 차단
+        if (!principal.equals(request.actor())) {
             throw new UnauthorizedHostException();
         }
         if (room.host().equals(request.targetUser())) {
@@ -44,6 +49,11 @@ public class KickService {
             eventPublisher.publishLobby(LOBBY_ROOM_UPDATE, current);
         }
         return read(roomId);
+    }
+
+    /** 하위호환: principal 없이 호출되는 경우 actor 기준으로 위임 */
+    public RoomResponse kick(String roomId, KickRequest request) {
+        return kick(roomId, request, request.actor());
     }
 
     private RoomResponse read(String roomId) {

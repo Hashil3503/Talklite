@@ -7,6 +7,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,7 +40,9 @@ public class RoomService {
         this.permanentRoomChatRepository = permanentRoomChatRepository;
     }
 
-    public RoomResponse create(CreateRoomRequest request) {
+    public RoomResponse create(CreateRoomRequest request, String principal) {
+        // DEF-01: Principal 강제 — request.host() 무시하고 인증된 principal을 방장으로 사용
+        String host = principal;
         Room room = new Room(
                 UUID.randomUUID().toString().substring(0, 8),
                 request.game().trim(),
@@ -47,7 +50,7 @@ public class RoomService {
                 request.capacity(),
                 request.scope(),
                 request.type(),
-                request.host(),
+                host,
                 System.currentTimeMillis()
         );
         roomMapper.save(room);
@@ -56,6 +59,11 @@ public class RoomService {
         }
         eventPublisher.publishLobby(LOBBY_ROOM_UPDATE, room);
         return get(room.id());
+    }
+
+    /** 하위호환: principal 없이 호출되는 경우 request.host() 사용 (테스트 직접 호출 대비) */
+    public RoomResponse create(CreateRoomRequest request) {
+        return create(request, request.host());
     }
 
     public RoomResponse get(String roomId) {
@@ -88,6 +96,14 @@ public class RoomService {
     }
 
     private RoomResponse joinInternal(Room room, String user) {
+        // DEF-02: 재입장 시 자동 승계 판정 — PERMANENT 0명/고아 상태 선체크
+        boolean shouldPromote = false;
+        if (room.type() == RoomType.PERMANENT) {
+            List<String> beforeMembers = roomMapper.members(room.id());
+            if (beforeMembers.isEmpty() || roomMapper.isOrphan(room.id())) {
+                shouldPromote = true;
+            }
+        }
         Long code = redis.execute(
                 joinScript,
                 List.of(
@@ -110,6 +126,16 @@ public class RoomService {
         }
         if (result == -1L) {
             throw new RoomFullException();
+        }
+        // DEF-02: 승계 실행 — 입장 성공 후 고아/빈 방이면 입장자를 새 방장으로 승격
+        if (shouldPromote) {
+            roomMapper.updateHost(room.id(), user);
+            permanentRoomRepository.updateHost(room.id(), user, Instant.now().toEpochMilli());
+            roomMapper.clearOrphan(room.id());
+            Room promoted = roomMapper.find(room.id());
+            if (promoted != null) {
+                eventPublisher.roomEvent(ROOM_EVENT_HOST_MIGRATED, promoted, user, null);
+            }
         }
         Room current = roomMapper.find(room.id());
         if (current == null) {
@@ -135,7 +161,13 @@ public class RoomService {
                 if (room.type() == RoomType.PERMANENT) {
                     permanentRoomRepository.updateHost(roomId, oldest, System.currentTimeMillis());
                 }
+                room = roomMapper.find(roomId);
                 eventPublisher.roomEvent(ROOM_EVENT_HOST_MIGRATED, room, oldest, null);
+            } else {
+                // DEF-02: 0명 PERMANENT 방장 고아화 방지 — 남은 인원 0명이면 고아 상태로 전환
+                if (room.type() == RoomType.PERMANENT) {
+                    roomMapper.markOrphan(roomId);
+                }
             }
         }
         eventPublisher.roomEvent(ROOM_EVENT_LEAVE, room, user, null);

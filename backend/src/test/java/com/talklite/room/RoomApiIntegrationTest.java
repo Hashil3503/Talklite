@@ -1,6 +1,7 @@
 package com.talklite.room;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.talklite.auth.SessionService;
 import com.talklite.test.IntegrationTestCleanup;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,7 @@ public class RoomApiIntegrationTest extends IntegrationTestCleanup {
 
         // 1. 방 생성
         String responseContent = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("user-host-1"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isOk())
@@ -62,6 +64,7 @@ public class RoomApiIntegrationTest extends IntegrationTestCleanup {
 
         // 3. 유저 입장
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor("user-guest-2"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("user-guest-2"))))
                 .andExpect(status().isOk())
@@ -69,6 +72,7 @@ public class RoomApiIntegrationTest extends IntegrationTestCleanup {
 
         // 4. 유저 퇴장
         mockMvc.perform(post("/api/rooms/" + roomId + "/leave")
+                        .header("Authorization", tokenFor("user-guest-2"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("user-guest-2"))))
                 .andExpect(status().isOk())

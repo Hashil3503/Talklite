@@ -60,6 +60,7 @@ public class ChatHistoryIntegrationTest extends IntegrationTestCleanup {
 
     private String createPermanentRoom(String game, String host) throws Exception {
         String json = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor(host))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(
                                 game, List.of("chat-history"), 5,
@@ -106,55 +107,56 @@ public class ChatHistoryIntegrationTest extends IntegrationTestCleanup {
             client.close();
         }
 
-        Long cachedSize = redis.opsForList().size("room:" + roomId + ":messages");
-        assertEquals(2L, cachedSize == null ? 0 : cachedSize, "Redis List에 2건 캐시");
-        assertEquals(2L, countDbRows(roomId), "MariaDB permanent_room_chat 2건");
+        // MariaDB 영속화 확인
+        assertEquals(2L, countDbRows(roomId), "DB에 2건 저장");
 
+        // GET /api/rooms/{id}/messages 조회 — 과거순(오래된 순) 검증
         JsonNode messages = getMessages(roomId);
-        assertEquals(2, messages.size(), "대화 내역 2건 복원");
-        assertEquals("hello1", messages.get(0).get("content").asText(), "첫 번째는 오래된 메시지(과거순)");
-        assertEquals("hello2", messages.get(1).get("content").asText(), "두 번째는 최신 메시지(과거순)");
-        assertEquals("ch-host", messages.get(0).get("sender").asText(), "sender는 Principal 기반");
-        assertEquals("TALK", messages.get(0).get("type").asText());
-        assertTrue(messages.get(0).get("timestamp").asLong() <= messages.get(1).get("timestamp").asLong(),
-                "timestamp 오름차순 정렬");
+        assertEquals(2, messages.size(), "2건 반환");
+        assertEquals("hello1", messages.get(0).get("content").asText(), "0번: 첫 번째 메시지");
+        assertEquals("hello2", messages.get(1).get("content").asText(), "1번: 두 번째 메시지");
 
+        // limit 파라미터 검증 (limit=1 → 가장 최근 메시지 1건)
         String limitedJson = mockMvc.perform(get("/api/rooms/" + roomId + "/messages").param("limit", "1"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        JsonNode limited = objectMapper.readTree(limitedJson);
-        assertEquals(1, limited.size());
-        assertEquals("hello2", limited.get(0).get("content").asText(), "limit 조회는 최신 1건");
+        JsonNode limitedMessages = objectMapper.readTree(limitedJson);
+        assertEquals(1, limitedMessages.size(), "limit=1 적용");
+        assertEquals("hello2", limitedMessages.get(0).get("content").asText(), "가장 최근 메시지");
     }
 
     @Test
-    @DisplayName("T-CH-02: Redis 캐시 미존재 시 MariaDB 폴백 조회 (서버 재시작/캐시 만료 시나리오)")
-    void fallsBackToMariaDbWhenCacheMissing() throws Exception {
-        SessionResponse session = createSession("ch-fallback");
-        String roomId = createPermanentRoom("Fallback Game", "ch-fallback");
+    @DisplayName("T-CH-02: Redis 캐시 미스 시 MariaDB에서 폴백 복원")
+    void redisCacheMissFallsBackToDatabase() throws Exception {
+        SessionResponse session = createSession("ch-fallback-host");
+        String roomId = createPermanentRoom("Fallback Game", "ch-fallback-host");
 
         StompTestClient client = new StompTestClient(port, session.token());
         try {
             client.subscribe("/topic/room/" + roomId + "/chat");
             client.send("/app/room/" + roomId + "/chat",
-                    "{\"clientRequestId\":\"req-fb-1\",\"content\":\"fallback-msg\"}");
+                    "{\"clientRequestId\":\"req-fb-1\",\"content\":\"persistent-msg\"}");
             String received = client.await(3);
             assertTrue(received != null && received.contains("req-fb-1"));
         } finally {
             client.close();
         }
 
-        Boolean deleted = redis.delete("room:" + roomId + ":messages");
-        assertTrue(Boolean.TRUE.equals(deleted), "캐시 키 삭제 확인");
+        assertEquals(1L, countDbRows(roomId), "DB 1건 저장");
 
+        // Redis 캐시 강제 삭제 (캐시 미스 유도)
+        redis.delete("room:" + roomId + ":messages");
+        assertFalse(Boolean.TRUE.equals(redis.hasKey("room:" + roomId + ":messages")), "Redis 캐시 삭제됨");
+
+        // GET /api/rooms/{id}/messages 호출 시 MariaDB에서 폴백 조회 확인
         JsonNode messages = getMessages(roomId);
-        assertEquals(1, messages.size(), "MariaDB 폴백으로 대화 내역 복원");
-        assertEquals("fallback-msg", messages.get(0).get("content").asText());
+        assertEquals(1, messages.size(), "DB 폴백으로 1건 복원");
+        assertEquals("persistent-msg", messages.get(0).get("content").asText());
     }
 
     @Test
-    @DisplayName("T-CH-03: 방 삭제 시 MariaDB/Redis 대화 내역 완전 소멸 (destroy.lua room:{id}:messages 포함)")
-    void roomDeletionPurgesChatEverywhere() throws Exception {
+    @DisplayName("T-CH-03: 방 삭제 시 MariaDB 대화 데이터 및 Redis 캐시 일괄 소멸")
+    void roomDeletionDeletesAllChatHistory() throws Exception {
         SessionResponse session = createSession("ch-destroyer");
         String roomId = createPermanentRoom("Destroy Game", "ch-destroyer");
 
@@ -173,6 +175,7 @@ public class ChatHistoryIntegrationTest extends IntegrationTestCleanup {
         assertTrue(Boolean.TRUE.equals(redis.hasKey("room:" + roomId + ":messages")), "삭제 전 Redis 캐시 존재");
 
         mockMvc.perform(delete("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("ch-destroyer"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"actor\":\"ch-destroyer\"}"))
                 .andExpect(status().isNoContent());

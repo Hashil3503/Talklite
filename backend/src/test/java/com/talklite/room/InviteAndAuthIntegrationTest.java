@@ -37,6 +37,7 @@ public class InviteAndAuthIntegrationTest extends IntegrationTestCleanup {
 
     private String createPrivateRoom(String host) throws Exception {
         String json = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor(host))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(
                                 "Private Game", java.util.List.of("inv"), 5,
@@ -61,6 +62,7 @@ public class InviteAndAuthIntegrationTest extends IntegrationTestCleanup {
 
         // 직접 join → 403 invite_required
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor("pv-guest"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("pv-guest"))))
                 .andExpect(status().isForbidden())
@@ -68,6 +70,7 @@ public class InviteAndAuthIntegrationTest extends IntegrationTestCleanup {
 
         // 방장이 초대코드 발급
         String inviteJson = mockMvc.perform(post("/api/rooms/" + roomId + "/invite")
+                        .header("Authorization", tokenFor("pv-host"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"actor\":\"pv-host\"}"))
                 .andExpect(status().isOk())
@@ -83,6 +86,7 @@ public class InviteAndAuthIntegrationTest extends IntegrationTestCleanup {
     @DisplayName("T-09b: 무효 초대코드 입장 → 404 invite_invalid")
     void invalidInviteCodeRejected() throws Exception {
         mockMvc.perform(post("/api/invite/INVALID/join")
+                        .header("Authorization", tokenFor("any-user"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("any-user"))))
                 .andExpect(status().isNotFound())
@@ -94,6 +98,7 @@ public class InviteAndAuthIntegrationTest extends IntegrationTestCleanup {
     void inviteJoinSucceeds() throws Exception {
         String roomId = createPrivateRoom("jv-host");
         String inviteJson = mockMvc.perform(post("/api/rooms/" + roomId + "/invite")
+                        .header("Authorization", tokenFor("jv-host"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"actor\":\"jv-host\"}"))
                 .andExpect(status().isOk())
@@ -106,6 +111,7 @@ public class InviteAndAuthIntegrationTest extends IntegrationTestCleanup {
         listener.subscribe("/topic/room/" + roomId);
 
         mockMvc.perform(post("/api/invite/" + code + "/join")
+                        .header("Authorization", tokenFor("jv-guest"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("jv-guest"))))
                 .andExpect(status().isOk());

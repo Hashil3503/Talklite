@@ -104,11 +104,19 @@ public class RoomMapper {
     }
 
     public String tagIndexKey(String tag) {
-        return TAG_INDEX_PREFIX.formatted(tag);
+        return TAG_INDEX_PREFIX.formatted(normalizeTag(tag));
     }
 
     public String gameIndexKey(String game) {
-        return GAME_INDEX_PREFIX.formatted(game.toLowerCase());
+        return GAME_INDEX_PREFIX.formatted(normalizeGame(game));
+    }
+
+    private String normalizeTag(String raw) {
+        return raw == null ? "" : raw.trim().toLowerCase();
+    }
+
+    private String normalizeGame(String raw) {
+        return raw == null ? "" : raw.trim().toLowerCase();
     }
 
     public void save(Room room) {
@@ -168,7 +176,8 @@ public class RoomMapper {
     }
 
     public List<String> members(String roomId) {
-        return redis.opsForSet().members(membersKey(roomId)).stream().sorted().toList();
+        Set<String> m = redis.opsForSet().members(membersKey(roomId));
+        return m == null ? List.of() : m.stream().sorted().toList();
     }
 
     /** 입장 시각(ZSet) 기록 — score = epoch millis */
@@ -178,7 +187,8 @@ public class RoomMapper {
 
     /** 체류 시간이 가장 긴 멤버 조회 (member, 없으면 null) */
     public String oldestMember(String roomId) {
-        return redis.opsForZSet().range(joinedAtKey(roomId), 0, 0).stream().findFirst().orElse(null);
+        Set<String> s = redis.opsForZSet().range(joinedAtKey(roomId), 0, 0);
+        return s == null ? null : s.stream().findFirst().orElse(null);
     }
 
     /** 멤버 제거 (members Set + joined_at ZSet 원자 제거) */
@@ -200,6 +210,22 @@ public class RoomMapper {
     /** 방장 갱신 (meta Hash) */
     public void updateHost(String roomId, String newHost) {
         redis.opsForHash().put(metaKey(roomId), "host", newHost);
+    }
+
+    /** DEF-02: PERMANENT 0명 고아 상태 마킹 (orphan=true) */
+    public void markOrphan(String roomId) {
+        redis.opsForHash().put(metaKey(roomId), "orphan", "true");
+    }
+
+    /** DEF-02: 고아 상태 해제 */
+    public void clearOrphan(String roomId) {
+        redis.opsForHash().delete(metaKey(roomId), "orphan");
+    }
+
+    /** DEF-02: 고아 상태 여부 확인 */
+    public boolean isOrphan(String roomId) {
+        Object v = redis.opsForHash().get(metaKey(roomId), "orphan");
+        return "true".equals(v) || "1".equals(v);
     }
 
     /**

@@ -19,17 +19,17 @@ public class InviteController {
     }
 
     @PostMapping("/api/rooms/{roomId}/invite")
-    public InviteResponse create(@PathVariable String roomId, @RequestBody InviteRequest body) {
-        return inviteService.create(roomId, body.actor());
+    public InviteResponse create(@PathVariable String roomId, @com.talklite.auth.AuthenticatedUser String principal, @RequestBody(required = false) InviteRequest body) {
+        return inviteService.create(roomId, principal);
     }
 
     @GetMapping("/api/rooms/{roomId}/invite")
-    public Map<String, String> get(@PathVariable String roomId, @RequestParam String actor) {
-        return Map.of("code", inviteService.getOrCreate(roomId, actor));
+    public Map<String, String> get(@PathVariable String roomId, @com.talklite.auth.AuthenticatedUser String principal) {
+        return Map.of("code", inviteService.getOrCreate(roomId, principal));
     }
 
     @PostMapping("/api/invite/{code}/join")
-    public RoomResponse join(@PathVariable String code, @RequestBody JoinRequest body) {
-        return inviteService.joinByCode(code, body.user());
+    public RoomResponse join(@PathVariable String code, @com.talklite.auth.AuthenticatedUser String principal, @RequestBody(required = false) JoinRequest body) {
+        return inviteService.joinByCode(code, principal);
     }
 }

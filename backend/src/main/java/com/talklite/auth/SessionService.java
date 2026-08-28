@@ -20,8 +20,9 @@ public class SessionService {
 
     public SessionResponse create(String user) {
         String token = UUID.randomUUID().toString();
-        redis.opsForValue().set(SESSION_KEY_PREFIX.formatted(token), user, Duration.ofSeconds(TTL_SECONDS));
-        return new SessionResponse(token, user, TTL_SECONDS);
+        String effectiveUser = (user == null || user.isBlank()) ? UUID.randomUUID().toString() : user;
+        redis.opsForValue().set(SESSION_KEY_PREFIX.formatted(token), effectiveUser, Duration.ofSeconds(TTL_SECONDS));
+        return new SessionResponse(token, effectiveUser, TTL_SECONDS);
     }
 
     /** 토큰이 유효하고 등록된 유저라면 유저 반환, 아니면 null */

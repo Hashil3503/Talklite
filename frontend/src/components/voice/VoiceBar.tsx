@@ -10,17 +10,27 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const speaking = useVoiceStore((state) => state.speakingUsers)
   const audioDevices = useVoiceStore((state) => state.audioDevices)
   const error = useVoiceStore((state) => state.error)
+  const isAudioAutoplayBlocked = useVoiceStore((state) => state.isAudioAutoplayBlocked)
   const joinVoice = useVoiceStore((state) => state.joinVoice)
   const leaveVoice = useVoiceStore((state) => state.leaveVoice)
   const toggleMute = useVoiceStore((state) => state.toggleMute)
   const toggleDeafen = useVoiceStore((state) => state.toggleDeafen)
   const setDevice = useVoiceStore((state) => state.setDevice)
+  const unlockAudio = useVoiceStore((state) => state.unlockAudio)
 
   const me = getUid()
   const meTalking = !!speaking[me]
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30">
+      {isAudioAutoplayBlocked && (
+        <button
+          onClick={() => void unlockAudio()}
+          className="mb-2 w-full rounded-xl border border-amber-500/40 bg-amber-950/90 px-4 py-2 text-xs font-semibold text-amber-200 shadow-lg"
+        >
+          오디오를 활성화하려면 클릭하세요
+        </button>
+      )}
       <div className="flex items-center gap-2 bg-zinc-900/95 border border-zinc-700 rounded-full pl-5 pr-2 py-2 shadow-2xl shadow-black/40">
         {error && !isInVoice && <span className="text-xs text-red-400">{error}</span>}
 

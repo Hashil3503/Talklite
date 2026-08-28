@@ -1,6 +1,7 @@
 package com.talklite.room;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.talklite.auth.SessionService;
 import com.talklite.test.IntegrationTestCleanup;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,7 +18,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -79,6 +79,7 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
                 "host-admin"
         );
         String createRes = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("host-admin"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -95,6 +96,7 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
         // 2. 방장 권한으로 DELETE /api/rooms/{id} 요청
         DeleteRoomRequest deleteRequest = new DeleteRoomRequest("host-admin");
         mockMvc.perform(delete("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("host-admin"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(deleteRequest)))
                 .andExpect(status().isNoContent());
@@ -124,6 +126,7 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
                 "host-owner"
         );
         String createRes = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("host-owner"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -135,6 +138,7 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
         // 일반 유저 guest-user 가 삭제 시도
         DeleteRoomRequest deleteRequest = new DeleteRoomRequest("guest-user");
         mockMvc.perform(delete("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("guest-user"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(deleteRequest)))
                 .andExpect(status().isForbidden())
@@ -150,6 +154,7 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
     void testDeleteNonExistentRoom() throws Exception {
         DeleteRoomRequest deleteRequest = new DeleteRoomRequest("any-user");
         mockMvc.perform(delete("/api/rooms/non-existent-room-id")
+                        .header("Authorization", tokenFor("any-user"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(deleteRequest)))
                 .andExpect(status().isNotFound())
@@ -168,6 +173,7 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
                 "host-leader"
         );
         String createRes = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("host-leader"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -177,13 +183,14 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
         createdRooms.add(roomId);
 
         // 멤버 2명 추가 입장
-        mockMvc.perform(post("/api/rooms/" + roomId + "/members/member-1")).andExpect(status().isOk());
-        mockMvc.perform(post("/api/rooms/" + roomId + "/members/member-2")).andExpect(status().isOk());
+        mockMvc.perform(post("/api/rooms/" + roomId + "/members/member-1").header("Authorization", tokenFor("member-1"))).andExpect(status().isOk());
+        mockMvc.perform(post("/api/rooms/" + roomId + "/members/member-2").header("Authorization", tokenFor("member-2"))).andExpect(status().isOk());
         assertEquals(3, redis.opsForSet().size("room:" + roomId + ":members"));
 
         // 방장이 폭파 실행 (SCARD > 0 임에도 destroy.lua 로 강제 파기되어야 함)
         DeleteRoomRequest deleteRequest = new DeleteRoomRequest("host-leader");
         mockMvc.perform(delete("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("host-leader"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(deleteRequest)))
                 .andExpect(status().isNoContent());
@@ -193,8 +200,8 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
         assertEquals(Boolean.FALSE, redis.hasKey("room:" + roomId + ":members"));
         assertEquals(Boolean.FALSE, redis.hasKey("room:" + roomId + ":joined_at"));
 
-        // 삭제된 방에 신규 유저 입장 시도 시 404 차단
-        mockMvc.perform(post("/api/rooms/" + roomId + "/members/late-user"))
+        // 삭제된 방에 신규 유저 입장 시도 시 401 → 방 없으므로 404가 되어야 하나, join도 인증 필요하므로 late-user 토큰으로 404 기대
+        mockMvc.perform(post("/api/rooms/" + roomId + "/members/late-user").header("Authorization", tokenFor("late-user")))
                 .andExpect(status().isNotFound());
     }
 }

@@ -2,6 +2,7 @@ package com.talklite.search;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.talklite.auth.SessionService;
 import com.talklite.test.IntegrationTestCleanup;
 import com.talklite.room.CreateRoomRequest;
 import com.talklite.room.RoomResponse;
@@ -38,6 +39,7 @@ public class SearchApiIntegrationTest extends IntegrationTestCleanup {
 
     private RoomResponse createRoom(String game, List<String> tags, RoomScope scope) throws Exception {
         String content = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("user-host"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(
                                 game, tags, 5, scope, RoomType.TEMPORARY, "user-host"

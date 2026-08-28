@@ -67,7 +67,7 @@ async function parseError(res: Response): Promise<never> {
 export async function joinRoom(roomId: string, user: string): Promise<RoomResponse> {
   const res = await fetch(`/api/rooms/${roomId}/join`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ user } satisfies JoinRequest),
   })
   if (!res.ok) return parseError(res)
@@ -77,17 +77,22 @@ export async function joinRoom(roomId: string, user: string): Promise<RoomRespon
 export async function leaveRoom(roomId: string, user: string): Promise<RoomResponse> {
   const res = await fetch(`/api/rooms/${roomId}/leave`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ user } satisfies JoinRequest),
   })
   if (!res.ok) return parseError(res)
   return res.json()
 }
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('talklite_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export async function kickUser(roomId: string, actor: string, targetUser: string, type: KickType): Promise<RoomResponse> {
   const res = await fetch(`/api/rooms/${roomId}/kick`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ actor, targetUser, type } satisfies KickRequest),
   })
   if (!res.ok) return parseError(res)
@@ -128,7 +133,7 @@ export async function createSession(user?: string): Promise<SessionResponse> {
 export async function createRoom(input: CreateRoomInput): Promise<RoomResponse> {
   const res = await fetch('/api/rooms', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(input),
   })
   if (!res.ok) return parseError(res)
@@ -138,7 +143,7 @@ export async function createRoom(input: CreateRoomInput): Promise<RoomResponse> 
 export async function getInviteCode(roomId: string, actor: string): Promise<InviteCodeResponse> {
   const res = await fetch(`/api/rooms/${roomId}/invite`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ actor }),
   })
   if (!res.ok) return parseError(res)
@@ -148,7 +153,7 @@ export async function getInviteCode(roomId: string, actor: string): Promise<Invi
 export async function joinWithInviteCode(code: string, user: string): Promise<RoomResponse> {
   const res = await fetch(`/api/invite/${encodeURIComponent(code)}/join`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ user } satisfies JoinRequest),
   })
   if (!res.ok) return parseError(res)
@@ -156,7 +161,7 @@ export async function joinWithInviteCode(code: string, user: string): Promise<Ro
 }
 
 export async function getRoom(roomId: string): Promise<RoomResponse> {
-  const res = await fetch(`/api/rooms/${roomId}`)
+  const res = await fetch(`/api/rooms/${roomId}`, { headers: getAuthHeaders() })
   if (!res.ok) return parseError(res)
   return res.json()
 }
@@ -166,7 +171,7 @@ export async function searchRooms(params: SearchParams = {}): Promise<RoomRespon
   if (params.game) query.set('game', params.game)
   if (params.tags) query.set('tags', params.tags)
   const qs = query.toString()
-  const res = await fetch(`/api/search${qs ? `?${qs}` : ''}`)
+  const res = await fetch(`/api/search${qs ? `?${qs}` : ''}`, { headers: getAuthHeaders() })
   if (!res.ok) {
     throw new Error(`Search failed: ${res.status}`)
   }
@@ -176,7 +181,7 @@ export async function searchRooms(params: SearchParams = {}): Promise<RoomRespon
 export async function deleteRoom(roomId: string, actor: string): Promise<void> {
   const res = await fetch(`/api/rooms/${roomId}`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ actor }),
   })
   if (!res.ok) return parseError(res)
@@ -194,7 +199,7 @@ export interface ApiChatMessage {
 }
 
 export async function getRoomMessages(roomId: string, limit = 50): Promise<ApiChatMessage[]> {
-  const res = await fetch(`/api/rooms/${roomId}/messages?limit=${limit}`)
+  const res = await fetch(`/api/rooms/${roomId}/messages?limit=${limit}`, { headers: getAuthHeaders() })
   if (!res.ok) return parseError(res)
   return res.json()
 }

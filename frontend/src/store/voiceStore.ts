@@ -28,9 +28,20 @@ function attachRemoteAudio(peerId: string, stream: MediaStream): void {
     document.body.appendChild(audio)
   }
   audio.srcObject = stream
-  void audio.play().catch(() => {
-    // 자동 재생 차단은 사용자 제스처 기반 승인으로 재시도
+  void audio.play().catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === 'NotAllowedError') {
+      useVoiceStore.setState({ isAudioAutoplayBlocked: true })
+    }
   })
+}
+
+async function unlockAudio(): Promise<void> {
+  const audios = Array.from(document.querySelectorAll<HTMLAudioElement>('audio[id^="remote-audio-"]'))
+  const results = await Promise.allSettled(audios.map((audio) => audio.play()))
+  const blocked = results.some(
+    (result) => result.status === 'rejected' && result.reason instanceof DOMException && result.reason.name === 'NotAllowedError'
+  )
+  useVoiceStore.setState({ isAudioAutoplayBlocked: blocked })
 }
 
 function removePeerAudio(peerId: string): void {
@@ -77,6 +88,7 @@ interface VoiceState {
   speakingUsers: Record<string, boolean>
   audioDevices: MediaDeviceInfo[]
   error: string | null
+  isAudioAutoplayBlocked: boolean
 
   connectRoomVoice: (roomId: string) => Promise<void>
   disconnectRoomVoice: () => void
@@ -87,6 +99,7 @@ interface VoiceState {
   toggleDeafen: () => void
   setDevice: (deviceId: string) => Promise<void>
   handleVoiceMembers: (members: string[]) => void
+  unlockAudio: () => Promise<void>
 }
 
 export const useVoiceStore = create<VoiceState>((set) => ({
@@ -97,6 +110,7 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   speakingUsers: {},
   audioDevices: [],
   error: null,
+  isAudioAutoplayBlocked: false,
 
   connectRoomVoice: async (roomId: string) => {
     speakerUnsub?.unsubscribe()
@@ -234,6 +248,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       // 장치 전환 실패 — 현재 장치 유지
     }
   },
+
+  unlockAudio,
 
   handleVoiceMembers: (rawMembers: string[]) => {
     const me = getUid()

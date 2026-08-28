@@ -1,5 +1,6 @@
 package com.talklite.room;
 
+import com.talklite.auth.AuthenticatedUser;
 import com.talklite.chat.ChatMessage;
 import com.talklite.chat.ChatService;
 import jakarta.validation.Valid;
@@ -29,8 +30,9 @@ public class RoomController {
     }
 
     @PostMapping
-    public RoomResponse create(@Valid @RequestBody CreateRoomRequest request) {
-        return roomService.create(request);
+    public RoomResponse create(@AuthenticatedUser String principal,
+                               @Valid @RequestBody CreateRoomRequest request) {
+        return roomService.create(request, principal);
     }
 
     @GetMapping("/{roomId}")
@@ -49,33 +51,65 @@ public class RoomController {
     }
 
     @PostMapping("/{roomId}/members/{user}")
-    public RoomResponse join(@PathVariable String roomId, @PathVariable String user) {
-        return roomService.join(roomId, user);
+    public RoomResponse join(@PathVariable String roomId,
+                             @PathVariable String user,
+                             @AuthenticatedUser String principal) {
+        if (!principal.equals(user)) {
+            throw new UnauthorizedHostException();
+        }
+        return roomService.join(roomId, principal);
     }
 
     @DeleteMapping("/{roomId}/members/{user}")
-    public RoomResponse leave(@PathVariable String roomId, @PathVariable String user) {
-        return roomService.leave(roomId, user);
+    public RoomResponse leave(@PathVariable String roomId,
+                              @PathVariable String user,
+                              @AuthenticatedUser String principal) {
+        if (!principal.equals(user)) {
+            throw new UnauthorizedHostException();
+        }
+        return roomService.leave(roomId, principal);
     }
 
     @PostMapping("/{roomId}/join")
-    public RoomResponse joinAlias(@PathVariable String roomId, @Valid @RequestBody JoinRequest body) {
-        return roomService.join(roomId, body.user());
+    public RoomResponse joinAlias(@PathVariable String roomId,
+                                  @AuthenticatedUser String principal,
+                                  @Valid @RequestBody JoinRequest body) {
+        if (!principal.equals(body.user())) {
+            throw new UnauthorizedHostException();
+        }
+        return roomService.join(roomId, principal);
     }
 
     @PostMapping("/{roomId}/leave")
-    public RoomResponse leaveAlias(@PathVariable String roomId, @Valid @RequestBody JoinRequest body) {
-        return roomService.leave(roomId, body.user());
+    public RoomResponse leaveAlias(@PathVariable String roomId,
+                                   @AuthenticatedUser String principal,
+                                   @Valid @RequestBody JoinRequest body) {
+        if (!principal.equals(body.user())) {
+            throw new UnauthorizedHostException();
+        }
+        return roomService.leave(roomId, principal);
     }
 
     @PostMapping("/{roomId}/kick")
-    public RoomResponse kick(@PathVariable String roomId, @Valid @RequestBody KickRequest body) {
-        return kickService.kick(roomId, body);
+    public RoomResponse kick(
+            @PathVariable String roomId,
+            @AuthenticatedUser String principal,
+            @Valid @RequestBody KickRequest body) {
+        if (!principal.equals(body.actor())) {
+            throw new UnauthorizedHostException();
+        }
+        return kickService.kick(roomId, body, principal);
     }
 
     @DeleteMapping("/{roomId}")
-    public org.springframework.http.ResponseEntity<Void> deleteRoom(@PathVariable String roomId, @Valid @RequestBody DeleteRoomRequest body) {
-        roomService.deleteByHost(roomId, body.actor());
+    public org.springframework.http.ResponseEntity<Void> deleteRoom(
+            @PathVariable String roomId,
+            @AuthenticatedUser String principal,
+            @Valid @RequestBody DeleteRoomRequest body) {
+        if (!principal.equals(body.actor())) {
+            throw new UnauthorizedHostException();
+        }
+        roomService.deleteByHost(roomId, principal);
         return org.springframework.http.ResponseEntity.noContent().build();
     }
 }

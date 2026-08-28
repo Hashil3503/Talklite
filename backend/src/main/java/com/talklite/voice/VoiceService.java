@@ -3,6 +3,10 @@ package com.talklite.voice;
 import com.talklite.realtime.RoomEventPublisher;
 import com.talklite.room.Room;
 import com.talklite.room.RoomMapper;
+import com.talklite.room.RoomNotFoundException;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -14,22 +18,37 @@ public class VoiceService {
 
     private final RoomMapper roomMapper;
     private final RoomEventPublisher eventPublisher;
+    private final StringRedisTemplate redis;
+    private final DefaultRedisScript<Long> voiceJoinScript;
 
-    public VoiceService(RoomMapper roomMapper, RoomEventPublisher eventPublisher) {
+    public VoiceService(RoomMapper roomMapper, RoomEventPublisher eventPublisher,
+                        StringRedisTemplate redis,
+                        @Qualifier("voiceJoinScript") DefaultRedisScript<Long> voiceJoinScript) {
         this.roomMapper = roomMapper;
         this.eventPublisher = eventPublisher;
+        this.redis = redis;
+        this.voiceJoinScript = voiceJoinScript;
     }
 
     public void start(String roomId, String user) {
         Room room = roomMapper.find(roomId);
         if (room == null) {
-            return;
+            throw new RoomNotFoundException(roomId);
         }
-        // 6인 정원 가드: 이미 음성 참여자가 아니면서 정원을 초과하면 거부 (WebRTC Mesh 상한)
-        if (!roomMapper.isVoiceMember(roomId, user) && roomMapper.voiceCount(roomId) >= MAX_VOICE_MEMBERS) {
-            return;
+        // 원자적 음성 정원 가드 (voice_join.lua)
+        Long result = redis.execute(
+                voiceJoinScript,
+                List.of(roomMapper.voiceKey(roomId), roomMapper.metaKey(roomId)),
+                user, String.valueOf(MAX_VOICE_MEMBERS)
+        );
+        long code = result == null ? 1L : result;
+        if (code == -2L) {
+            throw new RoomNotFoundException(roomId);
         }
-        roomMapper.addVoice(roomId, user);
+        if (code == -1L) {
+            throw new VoiceRoomFullException();
+        }
+        // code == 1 : 성공(신규 또는 멱등 재참여) → 이벤트 발행
         eventPublisher.publishVoice(room, user);
     }
 

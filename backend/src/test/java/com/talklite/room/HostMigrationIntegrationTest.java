@@ -33,6 +33,7 @@ public class HostMigrationIntegrationTest extends IntegrationTestCleanup {
     void hostMigratesToOldestMemberOnLeave() throws Exception {
         // H(방장)가 방 생성, A 입장(t1), B 입장(t2, t2>t1)
         String createContent = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("host-mig"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(
                                 "Migrate Game", List.of("host-m"), 3,
@@ -42,17 +43,20 @@ public class HostMigrationIntegrationTest extends IntegrationTestCleanup {
         String roomId = objectMapper.readValue(createContent, RoomResponse.class).id();
 
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor("user-a"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("user-a"))))
                 .andExpect(status().isOk());
         Thread.sleep(5);
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor("user-b"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("user-b"))))
                 .andExpect(status().isOk());
 
         // 방장 H 퇴장 → host가 "user-a"로 위임, H는 멤버에서 제거
         String after = mockMvc.perform(post("/api/rooms/" + roomId + "/leave")
+                        .header("Authorization", tokenFor("host-mig"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("host-mig"))))
                 .andExpect(status().isOk())

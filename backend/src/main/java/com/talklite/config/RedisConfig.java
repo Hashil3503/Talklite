@@ -31,4 +31,12 @@ public class RedisConfig {
         script.setResultType(Long.class);
         return script;
     }
+
+    @Bean
+    public DefaultRedisScript<Long> voiceJoinScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource("scripts/voice_join.lua"));
+        script.setResultType(Long.class);
+        return script;
+    }
 }

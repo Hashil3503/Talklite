@@ -54,6 +54,7 @@ public class SignalRealtimeIntegrationTest extends IntegrationTestCleanup {
 
     private String createRoom(String game, String host) throws Exception {
         String json = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor(host))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(
                                 game, List.of("vc"), 8,
@@ -65,6 +66,7 @@ public class SignalRealtimeIntegrationTest extends IntegrationTestCleanup {
 
     private void join(String roomId, String user) throws Exception {
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor(user))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest(user))))
                 .andExpect(status().isOk());

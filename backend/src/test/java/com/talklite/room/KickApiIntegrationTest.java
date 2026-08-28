@@ -1,6 +1,7 @@
 package com.talklite.room;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.talklite.auth.SessionService;
 import com.talklite.test.IntegrationTestCleanup;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ public class KickApiIntegrationTest extends IntegrationTestCleanup {
 
     private String createRoom() throws Exception {
         String content = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("host-k"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(
                                 "Kick Game", List.of("kick-tag"), 5,
@@ -40,6 +42,7 @@ public class KickApiIntegrationTest extends IntegrationTestCleanup {
 
     private void join(String roomId, String user) throws Exception {
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor(user))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest(user))))
                 .andExpect(status().isOk());
@@ -54,6 +57,7 @@ public class KickApiIntegrationTest extends IntegrationTestCleanup {
 
         // 방장 H가 B를 TEMPORARY 강퇴
         mockMvc.perform(post("/api/rooms/" + roomId + "/kick")
+                        .header("Authorization", tokenFor("host-k"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new KickRequest(
                                 "host-k", "user-b", KickType.TEMPORARY))))
@@ -62,6 +66,7 @@ public class KickApiIntegrationTest extends IntegrationTestCleanup {
 
         // 임시 밴된 B 재입장 → 403 user_banned
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor("user-b"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("user-b"))))
                 .andExpect(status().isForbidden())
@@ -76,6 +81,7 @@ public class KickApiIntegrationTest extends IntegrationTestCleanup {
         join(roomId, "user-b");
 
         mockMvc.perform(post("/api/rooms/" + roomId + "/kick")
+                        .header("Authorization", tokenFor("user-a"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new KickRequest(
                                 "user-a", "user-b", KickType.PERMANENT))))
@@ -90,6 +96,7 @@ public class KickApiIntegrationTest extends IntegrationTestCleanup {
         join(roomId, "user-a");
 
         mockMvc.perform(post("/api/rooms/" + roomId + "/kick")
+                        .header("Authorization", tokenFor("host-k"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new KickRequest(
                                 "host-k", "host-k", KickType.PERMANENT))))
@@ -104,12 +111,14 @@ public class KickApiIntegrationTest extends IntegrationTestCleanup {
         join(roomId, "user-a");
 
         mockMvc.perform(post("/api/rooms/" + roomId + "/kick")
+                        .header("Authorization", tokenFor("host-k"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new KickRequest(
                                 "host-k", "user-a", KickType.PERMANENT))))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor("user-a"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("user-a"))))
                 .andExpect(status().isForbidden())

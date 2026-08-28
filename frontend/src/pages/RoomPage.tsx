@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRoomStore } from '../store/roomStore'
 import { useVoiceStore } from '../store/voiceStore'
 import { ChatLog } from '../components/room/ChatLog'
 import { MemberList } from '../components/room/MemberList'
 import { InviteModal } from '../components/room/InviteModal'
 import { VoiceBar } from '../components/voice/VoiceBar'
-import { leaveRoom, getRoom, deleteRoom } from '../lib/api'
+import { leaveRoom, getRoom, deleteRoom, joinRoom } from '../lib/api'
+import { getOrCreateAnonymousId } from '../lib/uid'
 
 interface RoomPageProps {
   roomId: string
@@ -20,20 +21,22 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
   const [input, setInput] = useState('')
   const [showInvite, setShowInvite] = useState(false)
   const [loading, setLoading] = useState(false)
-  const currentUserId = localStorage.getItem('talklite_uid') || ''
+  const isComposingRef = useRef(false)
+  const currentUserId = getOrCreateAnonymousId()
 
   useEffect(() => {
     if (!currentRoom || currentRoom.id !== roomId) {
       setLoading(true)
-      getRoom(roomId)
+      joinRoom(roomId, currentUserId)
         .then((room) => setCurrentRoom(room))
+        .catch(() => getRoom(roomId).then((room) => setCurrentRoom(room)))
         .catch((err) => {
           alert(err.message || '방 정보를 불러오지 못했습니다.')
           onLeave()
         })
         .finally(() => setLoading(false))
     }
-  }, [roomId, currentRoom, setCurrentRoom, onLeave])
+  }, [roomId, currentRoom, setCurrentRoom, onLeave, currentUserId])
 
   // 방 진입 시 발화 상태 구독, 이탈/언마운트 시 음성 리소스 정리 (LEAVE/퇴장/언마운트)
   useEffect(() => {
@@ -43,9 +46,18 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
     }
   }, [roomId])
 
+  useEffect(() => {
+    const handleKicked = () => {
+      alert('방장에 의해 강퇴되었습니다.')
+      onLeave()
+    }
+    window.addEventListener('talklite:kicked', handleKicked)
+    return () => window.removeEventListener('talklite:kicked', handleKicked)
+  }, [onLeave])
+
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim()) return
+    if (isComposingRef.current || !input.trim()) return
     sendChat(input)
     setInput('')
   }
@@ -145,6 +157,12 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onCompositionStart={() => {
+                isComposingRef.current = true
+              }}
+              onCompositionEnd={() => {
+                isComposingRef.current = false
+              }}
               placeholder="메시지를 입력하세요... (Enter로 전송)"
               maxLength={500}
               className="flex-1 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition-colors"

@@ -4,6 +4,7 @@ import { SearchBar } from '../components/SearchBar'
 import { useLobbyStore } from '../store/lobbyStore'
 import { createRoom, joinWithInviteCode, joinRoom, type RoomScope, type RoomType } from '../lib/api'
 import { subscribeTopic } from '../lib/stomp'
+import { getOrCreateAnonymousId } from '../lib/uid'
 
 interface LobbyPageProps {
   onJoinRoom: (roomId: string) => void
@@ -25,7 +26,7 @@ export function LobbyPage({ onJoinRoom }: LobbyPageProps) {
   const [inviteCodeInput, setInviteCodeInput] = useState('')
   const [inviteError, setInviteError] = useState<string | null>(null)
 
-  const currentUserId = localStorage.getItem('talklite_uid') || ''
+  const getCurrentUserId = () => getOrCreateAnonymousId()
 
   useEffect(() => {
     search('', [])
@@ -56,7 +57,7 @@ export function LobbyPage({ onJoinRoom }: LobbyPageProps) {
         capacity,
         scope,
         type,
-        host: currentUserId,
+        host: getCurrentUserId(),
       })
       setShowCreateModal(false)
       onJoinRoom(room.id)
@@ -71,7 +72,7 @@ export function LobbyPage({ onJoinRoom }: LobbyPageProps) {
     setInviteError(null)
 
     try {
-      const room = await joinWithInviteCode(inviteCodeInput.trim().toUpperCase(), currentUserId)
+      const room = await joinWithInviteCode(inviteCodeInput.trim().toUpperCase(), getCurrentUserId())
       setShowInviteModal(false)
       onJoinRoom(room.id)
     } catch (err: any) {
@@ -81,7 +82,7 @@ export function LobbyPage({ onJoinRoom }: LobbyPageProps) {
 
   const handleSelectRoom = async (roomId: string) => {
     try {
-      await joinRoom(roomId, currentUserId)
+      await joinRoom(roomId, getCurrentUserId())
       onJoinRoom(roomId)
     } catch (err: any) {
       alert(err.message || '방 입장에 실패했습니다.')

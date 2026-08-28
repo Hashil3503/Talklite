@@ -63,6 +63,7 @@ public class PermanentRoomPersistenceIntegrationTest extends IntegrationTestClea
 
     private String createRoom(String game, List<String> tags, int capacity, RoomScope scope, RoomType type, String host) throws Exception {
         String json = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor(host))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(game, tags, capacity, scope, type, host))))
                 .andExpect(status().isOk())
@@ -84,11 +85,13 @@ public class PermanentRoomPersistenceIntegrationTest extends IntegrationTestClea
         assertTrue(savedInDb.get().tags().contains("clan"));
 
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor("second-user"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("second-user"))))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/rooms/" + roomId + "/leave")
+                        .header("Authorization", tokenFor("initial-host"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("initial-host"))))
                 .andExpect(status().isOk())

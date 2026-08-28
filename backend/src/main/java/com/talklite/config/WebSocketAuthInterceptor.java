@@ -69,6 +69,11 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                         && !roomMapper.members(roomId).contains(user.getName())) {
                     throw new org.springframework.messaging.MessagingException("not a member of private room");
                 }
+                // DEF-03: Presence 리스너가 SessionDisconnectEvent 시 room/user를 복원할 수 있도록 SessionAttributes에 저장
+                if (accessor.getSessionAttributes() != null) {
+                    accessor.getSessionAttributes().put("roomId", roomId);
+                    accessor.getSessionAttributes().put("user", user.getName());
+                }
             }
         }
         return message;

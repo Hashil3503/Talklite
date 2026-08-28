@@ -47,6 +47,7 @@ public class ChatRealtimeIntegrationTest extends IntegrationTestCleanup {
 
     private String createRoom(String game, String host) throws Exception {
         String json = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor(host))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(
                                 game, List.of("evt"), 5,
@@ -84,6 +85,7 @@ public class ChatRealtimeIntegrationTest extends IntegrationTestCleanup {
         listener.subscribe("/topic/room/" + roomId);
 
         mockMvc.perform(post("/api/rooms/" + roomId + "/join")
+                        .header("Authorization", tokenFor("joiner-b"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new JoinRequest("joiner-b"))))
                 .andExpect(status().isOk());

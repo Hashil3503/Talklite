@@ -14,6 +14,13 @@ public abstract class IntegrationTestCleanup {
     @Autowired
     private JdbcClient jdbc;
 
+    @Autowired
+    protected com.talklite.auth.SessionService sessionService;
+
+    protected String tokenFor(String user) {
+        return "Bearer " + sessionService.create(user).token();
+    }
+
     @BeforeEach
     void cleanBeforeEach() {
         clean();
