@@ -18,5 +18,7 @@ CREATE TABLE IF NOT EXISTS permanent_room_chat (
     content         VARCHAR(500)  NOT NULL,
     created_at      BIGINT        NOT NULL,
     type            VARCHAR(16)   NOT NULL,
+    media_url       VARCHAR(512)  NULL,
+    mentions        VARCHAR(2048) NULL,
     INDEX idx_room_created (room_id, created_at)
 );

@@ -1,5 +1,8 @@
 package com.talklite.chat;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -15,16 +18,26 @@ import java.util.List;
 public class PermanentRoomChatRepository {
 
     private final JdbcClient jdbc;
+    private final ObjectMapper objectMapper;
 
-    public PermanentRoomChatRepository(JdbcClient jdbc) {
+    public PermanentRoomChatRepository(JdbcClient jdbc, ObjectMapper objectMapper) {
         this.jdbc = jdbc;
+        this.objectMapper = objectMapper;
     }
 
     /** ChatMessage 1건 영속화 (id = messageId, created_at = timestamp) */
     public void save(ChatMessage message) {
+        String mentionsJson = null;
+        if (message.mentions() != null && !message.mentions().isEmpty()) {
+            try {
+                mentionsJson = objectMapper.writeValueAsString(message.mentions());
+            } catch (JsonProcessingException e) {
+                mentionsJson = null;
+            }
+        }
         jdbc.sql("""
-                INSERT INTO permanent_room_chat (id, room_id, sender, sender_nickname, content, created_at, type)
-                VALUES (:id, :roomId, :sender, :senderNickname, :content, :createdAt, :type)
+                INSERT INTO permanent_room_chat (id, room_id, sender, sender_nickname, content, created_at, type, media_url, mentions)
+                VALUES (:id, :roomId, :sender, :senderNickname, :content, :createdAt, :type, :mediaUrl, :mentions)
                 """)
                 .param("id", message.messageId())
                 .param("roomId", message.roomId())
@@ -33,6 +46,8 @@ public class PermanentRoomChatRepository {
                 .param("content", message.content())
                 .param("createdAt", message.timestamp())
                 .param("type", message.type())
+                .param("mediaUrl", message.mediaUrl())
+                .param("mentions", mentionsJson)
                 .update();
     }
 
@@ -42,7 +57,7 @@ public class PermanentRoomChatRepository {
      */
     public List<ChatMessage> findRecentMessages(String roomId, int limit) {
         List<ChatMessage> recent = jdbc.sql("""
-                        SELECT id, room_id, sender, sender_nickname, content, created_at, type
+                        SELECT id, room_id, sender, sender_nickname, content, created_at, type, media_url, mentions
                         FROM permanent_room_chat
                         WHERE room_id = :roomId
                         ORDER BY created_at DESC
@@ -50,16 +65,31 @@ public class PermanentRoomChatRepository {
                         """)
                 .param("roomId", roomId)
                 .param("limit", limit)
-                .query((rs, rowNum) -> new ChatMessage(
-                        rs.getString("id"),
-                        null,
-                        rs.getString("room_id"),
-                        rs.getString("sender"),
-                        rs.getString("sender_nickname"),
-                        rs.getString("content"),
-                        rs.getLong("created_at"),
-                        rs.getString("type")
-                ))
+                .query((rs, rowNum) -> {
+                    String mentionsRaw = rs.getString("mentions");
+                    List<String> mentions = List.of();
+                    if (mentionsRaw != null && !mentionsRaw.isBlank()) {
+                        try {
+                            // JSON 배열 파싱 (["uid1","uid2"])
+                            mentions = objectMapper.readValue(mentionsRaw, new TypeReference<>() {});
+                        } catch (Exception ex) {
+                            // 레거시 콤마 분리 폴백
+                            mentions = List.of(mentionsRaw.split(","));
+                        }
+                    }
+                    return new ChatMessage(
+                            rs.getString("id"),
+                            null,
+                            rs.getString("room_id"),
+                            rs.getString("sender"),
+                            rs.getString("sender_nickname"),
+                            rs.getString("content"),
+                            rs.getLong("created_at"),
+                            rs.getString("type"),
+                            rs.getString("media_url"),
+                            mentions
+                    );
+                })
                 .list();
         Collections.reverse(recent);
         return recent;

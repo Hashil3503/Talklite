@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { type RoomResponse, type ApiChatMessage, getRoomMessages } from '../lib/api'
 import { ensureStompConnected } from '../lib/stomp'
 import { useVoiceStore } from './voiceStore'
+import { playMentionPing } from '../lib/audioPing'
 
 export interface ChatMessage {
   messageId: string
@@ -12,6 +13,8 @@ export interface ChatMessage {
   content: string
   sentAt: number
   type: string
+  mediaUrl?: string | null
+  mentions?: string[]
   status?: 'pending' | 'confirmed' | 'failed'
 }
 
@@ -35,6 +38,9 @@ function normalizeMessage(raw: RawChatMessage): ChatMessage {
   return {
     ...raw,
     sentAt: raw.sentAt ?? raw.timestamp ?? Date.now(),
+    mentions: raw.mentions ?? [],
+    mediaUrl: raw.mediaUrl ?? null,
+    type: raw.type ?? 'TALK',
   } as ChatMessage
 }
 
@@ -48,6 +54,7 @@ interface RoomState {
   loadRecentMessages: (roomId: string) => Promise<void>
   addMessage: (msg: ChatMessage) => void
   sendChat: (content: string) => Promise<void>
+  sendImageChat: (mediaUrl: string, caption?: string) => Promise<void>
   connectRoomStomp: (roomId: string) => Promise<void>
   disconnectRoomStomp: () => void
   updateRoomEvent: (event: RoomEvent) => void
@@ -83,6 +90,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           content: h.content,
           timestamp: h.timestamp,
           type: h.type,
+          mediaUrl: h.mediaUrl ?? null,
+          mentions: h.mentions ?? [],
         } as unknown as RawChatMessage)
       )
       set((state) => {
@@ -90,7 +99,6 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         const existingIds = new Set(state.messages.map((m) => m.messageId))
         const fresh = normalized.filter((m) => !existingIds.has(m.messageId))
         if (fresh.length === 0) return state
-        // history가 과거순으로 오므로 기존 메시지와 합쳐 시간순 정렬 유지
         const merged = [...state.messages, ...fresh].sort((a, b) => a.sentAt - b.sentAt)
         return { messages: merged }
       })
@@ -101,6 +109,18 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
   addMessage: (msg) => {
     const incoming = normalizeMessage(msg as RawChatMessage)
+    // 멘션 핑: 내가 멘션됐고 발신자가 내가 아니면 사운드 재생 (500ms 디바운스는 audioPing 내부)
+    try {
+      const myUid = localStorage.getItem('talklite_uid') || ''
+      if (
+        myUid &&
+        incoming.sender !== myUid &&
+        Array.isArray(incoming.mentions) &&
+        incoming.mentions.includes(myUid)
+      ) {
+        playMentionPing()
+      }
+    } catch {}
     set((state) => {
       if (incoming.clientRequestId) {
         const index = state.messages.findIndex(
@@ -112,7 +132,6 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           return { messages: updated }
         }
       } else if (state.messages.some((m) => m.messageId === incoming.messageId)) {
-        // 대화 내역 복원분과 실시간 수신 중복 제거 (ID 기준)
         return state
       }
       return { messages: [...state.messages, { ...incoming, status: 'confirmed' }] }
@@ -126,7 +145,6 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const clientRequestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
     const uid = localStorage.getItem('talklite_uid') || 'anonymous'
 
-    // 1. 낙관적 임시 렌더
     const tempMsg: ChatMessage = {
       messageId: `temp-${clientRequestId}`,
       clientRequestId,
@@ -136,12 +154,13 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       content: content.trim(),
       sentAt: Date.now(),
       type: 'TALK',
+      mediaUrl: null,
+      mentions: [],
       status: 'pending',
     }
 
     set((state) => ({ messages: [...state.messages, tempMsg] }))
 
-    // 2. STOMP 전송
     try {
       const client = await ensureStompConnected()
       client.publish({
@@ -149,10 +168,64 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         body: JSON.stringify({
           clientRequestId,
           content: content.trim(),
+          type: 'TALK',
         }),
       })
 
-      // 3초 타임아웃 검사
+      setTimeout(() => {
+        set((state) => {
+          const msg = state.messages.find((m) => m.clientRequestId === clientRequestId)
+          if (msg && msg.status === 'pending') {
+            const updated = state.messages.map((m) =>
+              m.clientRequestId === clientRequestId ? { ...m, status: 'failed' as const } : m
+            )
+            return { messages: updated }
+          }
+          return state
+        })
+      }, 3000)
+    } catch {
+      set((state) => ({
+        messages: state.messages.map((m) =>
+          m.clientRequestId === clientRequestId ? { ...m, status: 'failed' as const } : m
+        ),
+      }))
+    }
+  },
+
+  sendImageChat: async (mediaUrl, caption) => {
+    const { currentRoom } = get()
+    if (!currentRoom || !mediaUrl) return
+    const clientRequestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+    const uid = localStorage.getItem('talklite_uid') || 'anonymous'
+    const text = caption?.trim() ?? ''
+
+    const tempMsg: ChatMessage = {
+      messageId: `temp-${clientRequestId}`,
+      clientRequestId,
+      roomId: currentRoom.id,
+      sender: uid,
+      senderName: uid,
+      content: text,
+      sentAt: Date.now(),
+      type: 'IMAGE',
+      mediaUrl,
+      mentions: [],
+      status: 'pending',
+    }
+    set((state) => ({ messages: [...state.messages, tempMsg] }))
+
+    try {
+      const client = await ensureStompConnected()
+      client.publish({
+        destination: `/app/room/${currentRoom.id}/chat`,
+        body: JSON.stringify({
+          clientRequestId,
+          content: text,
+          type: 'IMAGE',
+          mediaUrl,
+        }),
+      })
       setTimeout(() => {
         set((state) => {
           const msg = state.messages.find((m) => m.clientRequestId === clientRequestId)

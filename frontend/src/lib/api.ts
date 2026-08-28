@@ -196,10 +196,26 @@ export interface ApiChatMessage {
   content: string
   timestamp: number
   type: string
+  mediaUrl?: string | null
+  mentions?: string[] | null
 }
 
 export async function getRoomMessages(roomId: string, limit = 50): Promise<ApiChatMessage[]> {
   const res = await fetch(`/api/rooms/${roomId}/messages?limit=${limit}`, { headers: getAuthHeaders() })
+  if (!res.ok) return parseError(res)
+  return res.json()
+}
+
+export async function uploadRoomImage(roomId: string, blob: Blob, filename = 'paste.webp'): Promise<{ url: string; mediaUrl: string }> {
+  const form = new FormData()
+  form.append('file', blob, filename)
+  const headers = getAuthHeaders()
+  // fetch will set multipart boundary automatically — do not set Content-Type
+  const res = await fetch(`/api/rooms/${roomId}/images`, {
+    method: 'POST',
+    headers,
+    body: form,
+  })
   if (!res.ok) return parseError(res)
   return res.json()
 }
