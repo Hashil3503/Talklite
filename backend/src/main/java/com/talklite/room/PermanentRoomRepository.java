@@ -96,6 +96,27 @@ public class PermanentRoomRepository {
         jdbc.sql("DELETE FROM permanent_room WHERE id = :id").param("id", roomId).update();
     }
 
+    /** Phase 11: 방 정보 수정 시 영구방 동기화 (title/game/tags/capacity) */
+    public void updateRoom(String roomId, String title, String game, List<String> tags, int capacity, long updatedAt) {
+        // title은 nullable — null이면 기존 값 유지 (COALESCE), game/tags/capacity는 필수 갱신
+        jdbc.sql("""
+                UPDATE permanent_room
+                SET title = COALESCE(:title, title),
+                    game = :game,
+                    tags = :tags,
+                    capacity = :capacity,
+                    updated_at = :updatedAt
+                WHERE id = :id
+                """)
+                .param("title", title)
+                .param("game", game)
+                .param("tags", joinTags(tags))
+                .param("capacity", capacity)
+                .param("updatedAt", updatedAt)
+                .param("id", roomId)
+                .update();
+    }
+
     private String joinTags(List<String> tags) {
         if (tags == null || tags.isEmpty()) {
             return "";

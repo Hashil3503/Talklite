@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS permanent_room (
     id          VARCHAR(36)   NOT NULL PRIMARY KEY,
+    title       VARCHAR(128)  NULL DEFAULT NULL,
     game        VARCHAR(128)  NOT NULL,
     tags        VARCHAR(512)   NOT NULL DEFAULT '',
     capacity    INT            NOT NULL,

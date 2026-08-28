@@ -19,6 +19,7 @@ public class RoomEventPublisher {
     public static final String ROOM_EVENT_KICKED = "MEMBER_KICKED";
     public static final String ROOM_EVENT_VOICE = "VOICE_STATUS_CHANGED";
     public static final String ROOM_EVENT_DESTROYED = "ROOM_DESTROYED";
+    public static final String ROOM_EVENT_UPDATED = "ROOM_UPDATED";
     public static final String LOBBY_ROOM_UPDATE = "ROOM_UPDATE";
     public static final String LOBBY_VOICE_BADGE = "VOICE_BADGE_UPDATE";
     public static final String LOBBY_ROOM_REMOVED = "ROOM_REMOVED";
@@ -77,5 +78,26 @@ public class RoomEventPublisher {
         publisher.publish("talklite:lobby",
                 new LobbyEvent(LOBBY_ROOM_REMOVED, room.id(), room.game(),
                         0, room.capacity(), false, 0, System.currentTimeMillis()));
+    }
+
+    /** Phase 11: 방 정보 수정 실시간 전파 — 방 내부 + 로비 2중 브로드캐스트 */
+    public void publishRoomUpdated(Room room, String actor, String title, String game,
+                                   java.util.List<String> tags, int capacity, long timestamp) {
+        Map<String, Object> data = new java.util.HashMap<>();
+        if (title != null) data.put("title", title);
+        if (game != null) data.put("game", game);
+        if (tags != null) data.put("tags", tags);
+        data.put("capacity", capacity);
+        RoomEvent event = new RoomEvent(
+                ROOM_EVENT_UPDATED, room.id(), actor, null,
+                roomMapper.members(room.id()).size(), capacity, room.host(),
+                roomMapper.voiceCount(room.id()), roomMapper.voiceMembers(room.id()),
+                timestamp, data
+        );
+        publisher.publish("talklite:room:%s:events".formatted(room.id()), event);
+        // 로비에도 동일 이벤트 전파 (LobbyEvent 호환 + ROOM_UPDATED 타입)
+        publisher.publish("talklite:lobby", event);
+        // 기존 LOBBY_ROOM_UPDATE도 함께 전파해 구형 리스너 호환 유지
+        publishLobby(LOBBY_ROOM_UPDATE, room);
     }
 }

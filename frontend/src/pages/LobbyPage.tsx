@@ -31,8 +31,16 @@ export function LobbyPage({ onJoinRoom }: LobbyPageProps) {
   useEffect(() => {
     search('', [])
 
-    // 실시간 로비 갱신 구독
-    const sub = subscribeTopic('/topic/lobby', () => {
+    // 실시간 로비 갱신 구독 — ROOM_UPDATED는 증분 갱신, 그 외는 전체 재검색
+    const sub = subscribeTopic('/topic/lobby', (message) => {
+      try {
+        const raw: any = JSON.parse((message as any).body ?? '{}')
+        const body = typeof raw === 'string' ? JSON.parse(raw) : raw
+        if (body && body.type === 'ROOM_UPDATED') {
+          useLobbyStore.getState().handleRoomUpdated(body)
+          return
+        }
+      } catch {}
       search('', [])
     })
 

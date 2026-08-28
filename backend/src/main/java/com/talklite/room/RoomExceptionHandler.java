@@ -60,6 +60,17 @@ public class RoomExceptionHandler {
                 .body(Map.of("error", "unauthorized"));
     }
 
+    @ExceptionHandler(RoomCapacityConflictException.class)
+    ResponseEntity<Map<String, String>> capacityConflict(RoomCapacityConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "room_capacity_conflict"));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<Map<String, String>> illegalArg(IllegalArgumentException e) {
+        return ResponseEntity.badRequest().body(Map.of("error", "invalid_request"));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<Map<String, String>> invalid(MethodArgumentNotValidException e) {
         return ResponseEntity.badRequest().body(Map.of("error", "invalid_request"));

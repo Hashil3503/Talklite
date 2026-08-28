@@ -3,6 +3,7 @@ export type RoomType = 'TEMPORARY' | 'PERMANENT'
 
 export interface RoomResponse {
   id: string
+  title?: string | null
   game: string
   tags: string[]
   capacity: number
@@ -52,6 +53,9 @@ async function parseError(res: Response): Promise<never> {
   }
   switch (res.status) {
     case 409:
+      if (code === 'room_capacity_conflict') {
+        throw new ApiError(409, code, '정원이 현재 인원보다 작아 변경할 수 없습니다')
+      }
       throw new ApiError(409, code || 'room_full', '방이 가득 찼습니다')
     case 403:
       throw new ApiError(403, code || 'forbidden', code === 'user_banned' ? '강퇴/차단된 사용자입니다' : '권한이 없습니다')
@@ -185,6 +189,23 @@ export async function deleteRoom(roomId: string, actor: string): Promise<void> {
     body: JSON.stringify({ actor }),
   })
   if (!res.ok) return parseError(res)
+}
+
+export interface UpdateRoomInput {
+  title?: string
+  game?: string
+  tags?: string[]
+  capacity?: number
+}
+
+export async function updateRoom(roomId: string, data: UpdateRoomInput): Promise<RoomResponse> {
+  const res = await fetch(`/api/rooms/${roomId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) return parseError(res)
+  return res.json()
 }
 
 export interface ApiChatMessage {

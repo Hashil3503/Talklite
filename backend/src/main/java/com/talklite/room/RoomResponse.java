@@ -4,6 +4,7 @@ import java.util.List;
 
 public record RoomResponse(
         String id,
+        String title,
         String game,
         List<String> tags,
         int capacity,
@@ -15,8 +16,13 @@ public record RoomResponse(
         List<String> members
 ) {
     public static RoomResponse from(Room room, List<String> members) {
+        return from(room, members, null);
+    }
+
+    public static RoomResponse from(Room room, List<String> members, String title) {
         return new RoomResponse(
                 room.id(),
+                title,
                 room.game(),
                 room.tags(),
                 room.capacity(),

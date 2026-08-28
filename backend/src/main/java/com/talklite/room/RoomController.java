@@ -6,6 +6,7 @@ import com.talklite.chat.ChatService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -111,5 +112,13 @@ public class RoomController {
         }
         roomService.deleteByHost(roomId, principal);
         return org.springframework.http.ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{roomId}")
+    public RoomResponse updateRoom(
+            @PathVariable String roomId,
+            @AuthenticatedUser String principal,
+            @Valid @RequestBody UpdateRoomRequest body) {
+        return roomService.updateRoom(roomId, principal, body);
     }
 }

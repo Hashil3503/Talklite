@@ -30,6 +30,10 @@ export interface RoomEvent {
   voiceMembers?: string[]
   timestamp: number
   extra?: Record<string, any>
+  data?: Record<string, any>
+  title?: string
+  game?: string
+  tags?: string[]
 }
 
 type RawChatMessage = Omit<ChatMessage, 'sentAt'> & { sentAt?: number; timestamp?: number }
@@ -334,6 +338,21 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       const members = Array.isArray(event.voiceMembers) ? event.voiceMembers : []
       set({ voiceMembers: members })
       useVoiceStore.getState().handleVoiceMembers(members)
+    } else if (event.type === 'ROOM_UPDATED') {
+      const data = (event.data ?? event.extra ?? {}) as Record<string, any>
+      const title = (data.title ?? event.title) as string | undefined
+      const game = (data.game ?? event.game) as string | undefined
+      const tags = (data.tags ?? event.tags) as string[] | undefined
+      const capacity = (data.capacity ?? event.capacity) as number | undefined
+      set({
+        currentRoom: {
+          ...currentRoom,
+          title: title !== undefined ? title : currentRoom.title,
+          game: game !== undefined ? game : currentRoom.game,
+          tags: Array.isArray(tags) ? tags : currentRoom.tags,
+          capacity: typeof capacity === 'number' ? capacity : currentRoom.capacity,
+        },
+      })
     }
   },
 }))

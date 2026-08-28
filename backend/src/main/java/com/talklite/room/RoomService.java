@@ -8,6 +8,8 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,6 +17,7 @@ import static com.talklite.realtime.RoomEventPublisher.LOBBY_ROOM_UPDATE;
 import static com.talklite.realtime.RoomEventPublisher.ROOM_EVENT_HOST_MIGRATED;
 import static com.talklite.realtime.RoomEventPublisher.ROOM_EVENT_JOIN;
 import static com.talklite.realtime.RoomEventPublisher.ROOM_EVENT_LEAVE;
+import static com.talklite.realtime.RoomEventPublisher.ROOM_EVENT_UPDATED;
 
 @Service
 public class RoomService {
@@ -22,6 +25,7 @@ public class RoomService {
     private final StringRedisTemplate redis;
     private final RoomMapper roomMapper;
     private final DefaultRedisScript<Long> joinScript;
+    private final DefaultRedisScript<Long> updateScript;
     private final RoomEventPublisher eventPublisher;
     private final PermanentRoomRepository permanentRoomRepository;
     private final PermanentRoomChatRepository permanentRoomChatRepository;
@@ -29,19 +33,22 @@ public class RoomService {
     public RoomService(StringRedisTemplate redis,
                    RoomMapper roomMapper,
                    @Qualifier("joinScript") DefaultRedisScript<Long> joinScript,
+                   @Qualifier("updateScript") DefaultRedisScript<Long> updateScript,
                    RoomEventPublisher eventPublisher,
                    PermanentRoomRepository permanentRoomRepository,
                    PermanentRoomChatRepository permanentRoomChatRepository) {
         this.redis = redis;
         this.roomMapper = roomMapper;
         this.joinScript = joinScript;
+        this.updateScript = updateScript;
         this.eventPublisher = eventPublisher;
         this.permanentRoomRepository = permanentRoomRepository;
         this.permanentRoomChatRepository = permanentRoomChatRepository;
     }
 
+
+
     public RoomResponse create(CreateRoomRequest request, String principal) {
-        // DEF-01: Principal 강제 — request.host() 무시하고 인증된 principal을 방장으로 사용
         String host = principal;
         Room room = new Room(
                 UUID.randomUUID().toString().substring(0, 8),
@@ -61,7 +68,6 @@ public class RoomService {
         return get(room.id());
     }
 
-    /** 하위호환: principal 없이 호출되는 경우 request.host() 사용 (테스트 직접 호출 대비) */
     public RoomResponse create(CreateRoomRequest request) {
         return create(request, request.host());
     }
@@ -71,7 +77,8 @@ public class RoomService {
         if (room == null) {
             throw new RoomNotFoundException(roomId);
         }
-        return RoomResponse.from(room, roomMapper.members(roomId));
+        String title = (String) redis.opsForHash().get(roomMapper.metaKey(roomId), "title");
+        return RoomResponse.from(room, roomMapper.members(roomId), title);
     }
 
     public RoomResponse join(String roomId, String user) {
@@ -79,14 +86,12 @@ public class RoomService {
         if (room == null) {
             throw new RoomNotFoundException(roomId);
         }
-        // 비공개 방 직접 join 차단 (FR-ROOM-04, NFR-SEC-02)
         if (room.scope() == RoomScope.PRIVATE) {
             throw new InviteRequiredException();
         }
         return joinInternal(room, user);
     }
 
-    /** 초대코드 경유 입장 (non-public 허용) */
     public RoomResponse joinWithInvite(String roomId, String user) {
         Room room = roomMapper.find(roomId);
         if (room == null) {
@@ -96,7 +101,6 @@ public class RoomService {
     }
 
     private RoomResponse joinInternal(Room room, String user) {
-        // DEF-02: 재입장 시 자동 승계 판정 — PERMANENT 0명/고아 상태 선체크
         boolean shouldPromote = false;
         if (room.type() == RoomType.PERMANENT) {
             List<String> beforeMembers = roomMapper.members(room.id());
@@ -127,7 +131,6 @@ public class RoomService {
         if (result == -1L) {
             throw new RoomFullException();
         }
-        // DEF-02: 승계 실행 — 입장 성공 후 고아/빈 방이면 입장자를 새 방장으로 승격
         if (shouldPromote) {
             roomMapper.updateHost(room.id(), user);
             permanentRoomRepository.updateHost(room.id(), user, Instant.now().toEpochMilli());
@@ -164,7 +167,6 @@ public class RoomService {
                 room = roomMapper.find(roomId);
                 eventPublisher.roomEvent(ROOM_EVENT_HOST_MIGRATED, room, oldest, null);
             } else {
-                // DEF-02: 0명 PERMANENT 방장 고아화 방지 — 남은 인원 0명이면 고아 상태로 전환
                 if (room.type() == RoomType.PERMANENT) {
                     roomMapper.markOrphan(roomId);
                 }
@@ -172,12 +174,12 @@ public class RoomService {
         }
         eventPublisher.roomEvent(ROOM_EVENT_LEAVE, room, user, null);
 
-        // 휘발성 방: 마지막 인원 퇴장 → 원자적 파기 (gc.lua SCARD==0 가드, T-02)
         if (room.type() == RoomType.TEMPORARY) {
             boolean removed = roomMapper.deleteRoom(roomId, room);
             if (removed) {
                 eventPublisher.publishRoomRemoved(room);
-                return RoomResponse.from(room, List.of());
+                String title = (String) redis.opsForHash().get(roomMapper.metaKey(roomId), "title");
+                return RoomResponse.from(room, List.of(), title);
             }
         }
 
@@ -188,14 +190,6 @@ public class RoomService {
         return get(roomId);
     }
 
-    /**
-     * 방장 전용 명시적 방 삭제 (Phase 7, FR-ROOM-08, T-10).
-     * 1. 방장 권한(actor == host) 검증
-     * 2. MariaDB permanent_room 선삭제 (서버 재기동 부활 방지)
-     * 3. 채팅 대화 내역 영구 소멸 (MariaDB permanent_room_chat 전체 삭제)
-     * 4. Redis destroy.lua 원자적 강제 파기 (room:{id}:messages 포함)
-     * 5. /topic/room/{id} ROOM_DESTROYED 이벤트 및 /topic/lobby ROOM_REMOVED 이벤트 전파
-     */
     public void deleteByHost(String roomId, String actor) {
         Room room = roomMapper.find(roomId);
         if (room == null) {
@@ -211,5 +205,124 @@ public class RoomService {
         roomMapper.destroyRoom(roomId, room);
         eventPublisher.publishRoomDestroyed(room, actor);
         eventPublisher.publishRoomRemoved(room);
+    }
+
+    /**
+     * Phase 11: 방장 전용 방 정보 수정 (PATCH /api/rooms/{id})
+     * - host 검증 403, 존재 검증 404, 정원 충돌 409, 태그 정규화, Lua 원자 재색인, DB 동기화, STOMP 전파
+     */
+    public RoomResponse updateRoom(String roomId, String principal, UpdateRoomRequest request) {
+        Room room = roomMapper.find(roomId);
+        if (room == null) {
+            throw new RoomNotFoundException(roomId);
+        }
+        if (!room.host().equals(principal)) {
+            throw new UnauthorizedHostException();
+        }
+
+        // Resolve new values (null 또는 blank이면 기존 유지)
+        String newTitle = null;
+        if (request.title() != null) {
+            String t = request.title().trim();
+            if (!t.isEmpty()) {
+                if (t.length() > 50) throw new IllegalArgumentException("title too long");
+                newTitle = t;
+            } else {
+                // 빈 문자열은 기존 유지?—or empty title not allowed
+                newTitle = null;
+            }
+        } else {
+            // 기존 title 유지
+            Object existing = redis.opsForHash().get(roomMapper.metaKey(roomId), "title");
+            newTitle = existing instanceof String s ? s : null;
+        }
+
+        String newGame;
+        if (request.game() != null && !request.game().trim().isEmpty()) {
+            newGame = request.game().trim();
+            if (newGame.length() > 128) throw new IllegalArgumentException("game too long");
+        } else {
+            newGame = room.game();
+        }
+
+        List<String> newTags;
+        if (request.tags() != null) {
+            newTags = normalizeTags(request.tags());
+        } else {
+            newTags = room.tags();
+        }
+
+        int newCapacity;
+        if (request.capacity() != null) {
+            newCapacity = request.capacity();
+            if (newCapacity < 2 || newCapacity > 10) {
+                throw new IllegalArgumentException("capacity out of range");
+            }
+        } else {
+            newCapacity = room.capacity();
+        }
+
+        long updatedAt = System.currentTimeMillis();
+        String tagsCsv = String.join(",", newTags);
+        String titleArg = newTitle != null ? newTitle : "";
+        String gameArg = newGame;
+
+        if (updateScript == null) {
+            throw new IllegalStateException("updateScript not configured");
+        }
+
+        Long result = redis.execute(
+                updateScript,
+                List.of(
+                        roomMapper.metaKey(roomId),
+                        roomMapper.membersKey(roomId),
+                        roomMapper.voiceKey(roomId)
+                ),
+                roomId,
+                titleArg,
+                gameArg,
+                String.valueOf(newCapacity),
+                tagsCsv,
+                String.valueOf(updatedAt)
+        );
+        long code = result == null ? -1L : result;
+        if (code == -1L) {
+            throw new RoomNotFoundException(roomId);
+        }
+        if (code == -2L) {
+            throw new RoomCapacityConflictException("room_capacity_conflict");
+        }
+        if (code != 1L) {
+            throw new IllegalStateException("update failed code=" + code);
+        }
+
+        if (room.type() == RoomType.PERMANENT) {
+            permanentRoomRepository.updateRoom(roomId, newTitle, newGame, newTags, newCapacity, updatedAt);
+        }
+
+        Room updated = roomMapper.find(roomId);
+        if (updated == null) throw new RoomNotFoundException(roomId);
+        String finalTitle = newTitle != null ? newTitle : (String) redis.opsForHash().get(roomMapper.metaKey(roomId), "title");
+
+        // STOMP ROOM_UPDATED 전파 (방 + 로비)
+        eventPublisher.publishRoomUpdated(updated, principal, finalTitle, newGame, newTags, newCapacity, updatedAt);
+
+        return RoomResponse.from(updated, roomMapper.members(roomId), finalTitle);
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null) return List.of();
+        LinkedHashSet<String> set = new LinkedHashSet<>();
+        for (String raw : tags) {
+            if (raw == null) continue;
+            String t = raw.trim().toLowerCase();
+            if (t.isEmpty()) continue;
+            // remove duplicate after lowercase
+            set.add(t);
+            if (set.size() > 5) {
+                throw new IllegalArgumentException("too many tags");
+            }
+        }
+        return new ArrayList<>(set);
     }
 }

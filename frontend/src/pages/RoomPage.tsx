@@ -4,6 +4,7 @@ import { useVoiceStore } from '../store/voiceStore'
 import { ChatLog } from '../components/room/ChatLog'
 import { MemberList } from '../components/room/MemberList'
 import { InviteModal } from '../components/room/InviteModal'
+import { EditRoomModal } from '../components/room/EditRoomModal'
 import { VoiceBar } from '../components/voice/VoiceBar'
 import { leaveRoom, getRoom, deleteRoom, joinRoom, uploadRoomImage } from '../lib/api'
 import { getOrCreateAnonymousId } from '../lib/uid'
@@ -85,6 +86,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
 
   const [input, setInput] = useState('')
   const [showInvite, setShowInvite] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const isComposingRef = useRef(false)
@@ -311,7 +313,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
             ← 로비로
           </button>
           <div className="h-4 w-px bg-zinc-800" />
-          <h1 className="text-lg font-bold tracking-tight">{currentRoom.game}</h1>
+          <h1 className="text-lg font-bold tracking-tight">{(currentRoom as any).title || currentRoom.game}</h1>
           <div className="flex items-center gap-1.5">
             {currentRoom.tags.map((tag) => (
               <span key={tag} className="text-xs px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300">
@@ -332,12 +334,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
           )}
 
           {currentRoom.host === currentUserId && (
-            <button
-              onClick={handleDeleteRoom}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 transition-colors flex items-center gap-1"
-            >
-              <span>🗑️ 방 삭제</span>
-            </button>
+            <>
+              <button
+                onClick={() => setShowEdit(true)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition-colors flex items-center gap-1"
+              >
+                <span>⚙️ 방 설정</span>
+              </button>
+              <button
+                onClick={handleDeleteRoom}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 transition-colors flex items-center gap-1"
+              >
+                <span>🗑️ 방 삭제</span>
+              </button>
+            </>
           )}
 
           <button
@@ -413,6 +423,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
       </div>
 
       <InviteModal roomId={currentRoom.id} isOpen={showInvite} onClose={() => setShowInvite(false)} />
+      <EditRoomModal
+        room={currentRoom}
+        isOpen={showEdit}
+        onClose={() => setShowEdit(false)}
+        onUpdated={(updated) => {
+          // 즉시 로컬 반영 (STOMP 전파 전 UX)
+          useRoomStore.setState({ currentRoom: updated })
+        }}
+      />
 
       <VoiceBar roomId={roomId} />
     </div>
