@@ -3,11 +3,13 @@
  * 송신: rawMicStream -> Source -> [DenoiseWorklet(Phase 12, 옵션)] -> inputGain(0~2.0) -> DynamicsCompressor(-6dB 12:1) -> Destination
  * 수신: peer Stream -> Source -> peerGain(0~2.0) -> masterGain(0~1.0) -> AudioContext.destination
  *
- * Phase 12: setNoiseSuppression(enabled, model) — Destination 불변, denoiseSeq 시퀀스 가드,
- * 5ms 크로스페이드, WASM 로딩 실패 시 Graceful Fallback(바이패스).
+ * Phase 12 단순 스왑 파이프라인 (P0-4): 이중 Gain 병렬·크로스페이드 제거
+ * OFF: source -> inputGain -> compressor -> destination
+ * ON:  source -> workletNode -> inputGain -> compressor -> destination
+ * Destination 불변, denoiseSeq 경합 가드, WASM 실패 시 Graceful Fallback.
  */
 
-import { createDenoiseNode, disposeHandle, rampGain, type DenoiseEngineHandle } from './noise/denoiseEngine'
+import { createDenoiseNode, disposeHandle, type DenoiseEngineHandle } from './noise/denoiseEngine'
 import type { NoiseSuppressionModel } from './noise/types'
 
 export interface VoiceAudioEngine {
@@ -49,10 +51,8 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   private currentMasterVolume = 1
   private currentInputGain = 1
 
-  // Phase 12 — denoise 파이프라인
+  // Phase 12 — 단순 스왑: 단일 worklet 노드로 축소 (이중 Gain 제거)
   private denoiseHandle: DenoiseEngineHandle | null = null
-  private denoiseInputGain: GainNode | null = null
-  private denoiseBypassGain: GainNode | null = null
   private denoiseSeq = 0
   private noiseSuppressionEnabled = false
   private noiseSuppressionModel: NoiseSuppressionModel = 'rnnoise'
@@ -70,7 +70,6 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     }
     this.ctx = ctx
 
-    // Input pipeline nodes (lazy — created without source)
     const inputGain = ctx.createGain()
     inputGain.gain.value = this.currentInputGain
     this.inputGain = inputGain
@@ -96,30 +95,7 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     masterGain.connect(ctx.destination)
     this.masterGain = masterGain
 
-    // Phase 12 — denoise 기본 배선 확립 (destination 불변 원칙)
-    // bypassGain은 항상 inputGain에 연결, denoiseInputGain은 Worklet 생성 시 연결
-    if (!this.denoiseBypassGain) {
-      const bg = ctx.createGain()
-      bg.gain.value = 1
-      this.denoiseBypassGain = bg
-      bg.connect(inputGain)
-    } else {
-      try {
-        this.denoiseBypassGain.disconnect()
-      } catch {
-        // ignore
-      }
-      this.denoiseBypassGain.connect(inputGain)
-    }
-    if (!this.denoiseInputGain) {
-      const dg = ctx.createGain()
-      dg.gain.value = 0
-      this.denoiseInputGain = dg
-      // Worklet 노드 연결은 applyNoiseSuppression에서 수행
-    }
-
-    // Connect inputGain -> compressor -> destination (source connects later)
-    // Analyser taps off inputGain in parallel (VU meter does not affect compressed stream)
+    // inputGain -> compressor -> destination, inputGain -> analyser (단순 파이프라인)
     inputGain.connect(compressor)
     inputGain.connect(analyser)
     compressor.connect(destination)
@@ -128,12 +104,9 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   }
 
   initializeInput(rawStream: MediaStream): MediaStream {
-    // If already initialized, clean previous source but keep nodes if context exists
-    // For fresh session ensure context & nodes exist (destination 불변)
     const ctx = this.ensureContext()
     this.rawInputStream = rawStream
 
-    // Disconnect previous source if exists
     if (this.inputSource) {
       try {
         this.inputSource.disconnect()
@@ -143,15 +116,13 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
       this.inputSource = null
     }
 
-    // (Re)create missing nodes individually — destination 불변 원칙: 기존 destination 재사용
+    // destination 불변: 누락 노드 개별 재생성
     if (!this.inputGain || !this.compressor || !this.destination || !this.analyser || !this.masterGain) {
-      // inputGain
       if (!this.inputGain) {
         const inputGain = ctx.createGain()
         inputGain.gain.value = this.currentInputGain
         this.inputGain = inputGain
       }
-      // compressor
       if (!this.compressor) {
         const compressor = ctx.createDynamicsCompressor()
         compressor.threshold.value = -6
@@ -161,18 +132,15 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
         compressor.release.value = 0.25
         this.compressor = compressor
       }
-      // destination — 재생성 금지 (기존 유지), null일 때만 생성
       if (!this.destination) {
         this.destination = ctx.createMediaStreamDestination()
       }
-      // analyser
       if (!this.analyser) {
         const analyser = ctx.createAnalyser()
         analyser.fftSize = 256
         analyser.smoothingTimeConstant = 0.8
         this.analyser = analyser
       }
-      // masterGain
       if (!this.masterGain) {
         const mg = ctx.createGain()
         mg.gain.value = this.isDeafened ? 0 : this.currentMasterVolume
@@ -187,9 +155,6 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
           peer.gain.connect(mg)
         }
       }
-      // Reconnect pipeline if any node was recreated — destination 불변 재연결
-      // inputGain -> compressor -> destination, inputGain -> analyser
-      // denoise gains은 ensureContext에서 이미 배선됨
       try {
         this.inputGain!.disconnect()
       } catch {
@@ -208,42 +173,46 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
       this.inputGain!.connect(this.compressor!)
       this.inputGain!.connect(this.analyser!)
       this.compressor!.connect(this.destination!)
-      // denoiseBypassGain -> inputGain 재연결 (ensureContext에서 이미 했으나 재생성 시 보정)
-      if (this.denoiseBypassGain && this.inputGain) {
-        try {
-          this.denoiseBypassGain.disconnect()
-        } catch {
-          // ignore
-        }
-        this.denoiseBypassGain.connect(this.inputGain)
-      }
-      // denoiseInputGain -> worklet 재연결은 applyNoiseSuppression에서 담당, 여기서는 disconnect 상태 유지
     }
 
     const source = ctx.createMediaStreamSource(rawStream)
     this.inputSource = source
-    // P0-1A: 직결 제거 — 토폴로지 단일 책임 rewireInputSource로 일원화 (병렬 2간선 vs 직결 0개 불변식)
+    // 단일 스왑 헬퍼로 일원화: OFF는 source->inputGain, ON은 source->worklet->inputGain
     this.rewireInputSource(source)
 
-    // Return processed stream (destination stream — 불변)
     return this.destination ? this.destination.stream : rawStream
   }
 
-  /** Phase 12 — 잡음 제거 활성 상태에 따라 새 Source를 올바른 게인에 재연결 */
+  /** 단순 스왑: OFF source->inputGain / ON source->worklet->inputGain (어떤 경우에도 단절 없음) */
   private rewireInputSource(source: MediaStreamAudioSourceNode): void {
-    if (this.noiseSuppressionEnabled && this.denoiseHandle && this.denoiseInputGain && this.denoiseBypassGain && this.inputGain) {
-      // Denoise 활성: source → denoiseInputGain(→worklet→inputGain) + source → bypassGain(→inputGain) 병렬
+    if (!this.inputGain) return
+    // 기존 연결 정리 — source와 worklet 모두 disconnect 후 재연결로 간선 수 불변 보장
+    try {
+      source.disconnect()
+    } catch {
+      // ignore
+    }
+    if (this.denoiseHandle) {
       try {
-        source.connect(this.denoiseInputGain)
+        this.denoiseHandle.node.disconnect()
+      } catch {
+        // ignore
+      }
+    }
+    if (this.noiseSuppressionEnabled && this.denoiseHandle) {
+      // ON: source -> worklet -> inputGain
+      try {
+        source.connect(this.denoiseHandle.node)
       } catch {
         // ignore
       }
       try {
-        source.connect(this.denoiseBypassGain)
+        this.denoiseHandle.node.connect(this.inputGain)
       } catch {
         // ignore
       }
-    } else if (this.inputGain) {
+    } else {
+      // OFF: source -> inputGain
       try {
         source.connect(this.inputGain)
       } catch {
@@ -254,10 +223,8 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
 
   replaceInput(newStream: MediaStream): MediaStream {
     if (!this.ctx || !this.inputGain || !this.destination) {
-      // No context yet — fallback to initialize
       return this.initializeInput(newStream)
     }
-    // Hot-swap: keep Destination & track, only replace Source
     this.rawInputStream = newStream
     if (this.inputSource) {
       try {
@@ -281,10 +248,20 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     const master = this.masterGain
     if (!ctx || !master) return
 
+    // P0-5: suspended 시 resume 시도 — 원격 무음 방지
+    if (ctx.state === 'suspended') {
+      void ctx.resume().catch(() => {
+        // ignore
+      })
+    }
+
     const existing = this.peerMap.get(peerId)
     if (existing) {
-      if (existing.stream === stream) return
-      // Different stream for same peer — replace source
+      if (existing.stream === stream) {
+        // P1-5: 동일 stream이라도 볼륨·mute 상태가 바뀌었을 수 있으므로 early return 전에 볼륨은 상위에서 재적용됨
+        // 여기서는 peerMap 갱신 없이 반환하되, 상위 attachRemoteAudio에서 setPeerVolume 보장
+        return
+      }
       try {
         existing.source.disconnect()
         existing.gain.disconnect()
@@ -296,7 +273,6 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
 
     const source = ctx.createMediaStreamSource(stream)
     const gain = ctx.createGain()
-    // Default 1.0 — actual volume will be set via setPeerVolume after attach
     gain.gain.value = 1
     source.connect(gain)
     gain.connect(master)
@@ -384,11 +360,10 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   }
 
   /**
-   * Phase 12 — 무단절 denoise 파이프라인 전환.
-   * - Destination 노드 불변 (WebRTC 송신 트랙 유지)
-   * - denoiseSeq 시퀀스 가드로 동시 전환 경합 방지 (마지막 요청만 유효)
-   * - 5ms 크로스페이드 (팝 노이즈 방어)
-   * - WASM/Worklet 로딩 실패 시 Graceful Fallback: 바이패스 유지, false 반환
+   * 단순 스왑 denoise 전환 (P0-4)
+   * OFF: source -> inputGain
+   * ON:  source -> worklet -> inputGain
+   * Destination 불변, seq 경합 가드, 실패 시 bypass 유지
    */
   private async applyNoiseSuppression(enabled: boolean, model: NoiseSuppressionModel): Promise<boolean> {
     if (!this.ctx || !this.inputSource || !this.inputGain) return false
@@ -397,27 +372,63 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
 
     this.noiseSuppressionModel = model
 
-    // OFF (바이패스): 기존 노드는 유지하되 크로스페이드로 게인 전환 후 노드 해제
     if (!enabled) {
       this.noiseSuppressionEnabled = false
-      this.crosfadeToBypass()
-      // 시퀀스 가드: 최신 요청이 아니면 노드 정리를 미룬다 (dispose는 최종 책임)
+      // 원자 스왑: source를 worklet에서 분리해 inputGain으로 직접 연결
+      try {
+        this.inputSource.disconnect()
+      } catch {
+        // ignore
+      }
+      if (this.denoiseHandle) {
+        try {
+          this.denoiseHandle.node.disconnect()
+        } catch {
+          // ignore
+        }
+      }
+      try {
+        this.inputSource.connect(this.inputGain)
+      } catch {
+        // ignore
+      }
       if (seq === this.denoiseSeq) {
         this.teardownDenoiseNodes()
       }
       return true
     }
 
-    // ON: 엔진 노드 준비 (없거나 모델이 바뀐 경우에만 생성 → 핫스왑)
-    // P0-1B: 동일 모델 OFF→ON 재활성 시 needsNewNode==false 여도 끊어진 간선 재연결 보장
+    // ON: 이미 같은 모델로 ON이면 재연결 보장 후 반환
+    if (this.noiseSuppressionEnabled && this.denoiseHandle && this.denoiseHandle.model === model) {
+      // 이미 ON — 간선 보장 (suspended resume 등으로 끊겼을 수 있음)
+      try {
+        this.inputSource.disconnect()
+      } catch {
+        // ignore
+      }
+      try {
+        this.denoiseHandle.node.disconnect()
+      } catch {
+        // ignore
+      }
+      try {
+        this.inputSource.connect(this.denoiseHandle.node)
+      } catch {
+        // ignore
+      }
+      try {
+        this.denoiseHandle.node.connect(this.inputGain)
+      } catch {
+        // ignore
+      }
+      return true
+    }
+
     try {
       const needsNewNode = !this.denoiseHandle || this.denoiseHandle.model !== model
-      // needsRewire: OFF 시 teardown으로 denoiseInputGain이 끊긴 경우 재연결 필요
-      const needsRewire = !needsNewNode && !!this.denoiseHandle && !!this.denoiseInputGain
       if (needsNewNode) {
         const oldHandle = this.denoiseHandle
         const node = await createDenoiseNode(ctx, model)
-        // 시퀀스 가드: 로딩 중 다른 요청이 들어왔으면 새 노드 폐기하고 포기
         if (seq !== this.denoiseSeq) {
           disposeHandle({ model, node, dispose: () => {} })
           return false
@@ -426,135 +437,61 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
           disposeHandle(oldHandle)
         }
         this.denoiseHandle = { model, node, dispose: () => disposeHandle({ model, node, dispose: () => {} }) }
-
-        // 토폴로지: source -> denoiseInput -> worklet -> inputGain (병렬 2간선, 직결 0개 불변식)
-        if (!this.denoiseInputGain) {
-          const dg = ctx.createGain()
-          dg.gain.value = 0
-          this.denoiseInputGain = dg
-        }
-        if (!this.denoiseBypassGain) {
-          const bg = ctx.createGain()
-          bg.gain.value = 1
-          this.denoiseBypassGain = bg
-          bg.connect(this.inputGain)
-        } else {
-          // ensureContext에서 이미 생성된 경우에도 bypass -> inputGain 재연결 보장
-          try {
-            this.denoiseBypassGain.disconnect()
-          } catch {
-            // ignore
-          }
-          this.denoiseBypassGain.connect(this.inputGain)
-        }
-
-        // denoiseInputGain -> worklet -> inputGain (중복 connect 방지 위해 disconnect 선행)
-        try {
-          this.denoiseInputGain.disconnect()
-        } catch {
-          // ignore
-        }
-        try {
-          node.disconnect()
-        } catch {
-          // ignore
-        }
-        this.denoiseInputGain.connect(node)
-        node.connect(this.inputGain)
-        // source 병렬 2간선 보장 — rewireInputSource 로직과 동일하게 양쪽 모두 연결
-        // 기존 직결(source->inputGain)이 남아있으면 제거는 rewire가 담당하나, 여기서는 명시적 병렬 연결
-        try {
-          this.inputSource.disconnect(this.denoiseInputGain)
-        } catch {
-          // ignore
-        }
-        try {
-          this.inputSource.disconnect(this.denoiseBypassGain)
-        } catch {
-          // ignore
-        }
-        // 직결이 남아있다면 제거 (OFF->ON 전환 시 직결 0개 불변식)
-        try {
-          this.inputSource.disconnect(this.inputGain)
-        } catch {
-          // ignore
-        }
-        this.inputSource.connect(this.denoiseInputGain)
-        this.inputSource.connect(this.denoiseBypassGain)
-      } else if (needsRewire) {
-        // 동일 모델 재활성: teardown으로 끊어진 denoiseInputGain -> worklet 간선 복구 + source 병렬 재연결
-        const node = this.denoiseHandle!.node
-        const dg = this.denoiseInputGain!
-        const bg = this.denoiseBypassGain!
-        try {
-          dg.disconnect()
-        } catch {
-          // ignore
-        }
-        try {
-          node.disconnect()
-        } catch {
-          // ignore
-        }
-        dg.connect(node)
-        node.connect(this.inputGain)
-        // source -> 양쪽 Gain 병렬 재연결 (직결 제거)
-        try {
-          this.inputSource.disconnect(dg)
-        } catch {
-          // ignore
-        }
-        try {
-          this.inputSource.disconnect(bg)
-        } catch {
-          // ignore
-        }
-        try {
-          this.inputSource.disconnect(this.inputGain)
-        } catch {
-          // ignore
-        }
-        this.inputSource.connect(dg)
-        this.inputSource.connect(bg)
-        // bypass -> inputGain 재연결 보장
-        try {
-          bg.disconnect()
-        } catch {
-          // ignore
-        }
-        bg.connect(this.inputGain)
+      }
+      // 원자 스왑: source -> worklet -> inputGain
+      const handle = this.denoiseHandle!
+      try {
+        this.inputSource.disconnect()
+      } catch {
+        // ignore
+      }
+      try {
+        handle.node.disconnect()
+      } catch {
+        // ignore
+      }
+      try {
+        this.inputSource.connect(handle.node)
+      } catch {
+        // ignore
+      }
+      try {
+        handle.node.connect(this.inputGain)
+      } catch {
+        // ignore
       }
 
       this.noiseSuppressionEnabled = true
-      this.crosfadeToDenoise()
       return true
     } catch (err) {
-      // Graceful Fallback — WASM 로딩 실패 등: 통화 유지, 바이패스로 복귀
       console.error('[voice] noise suppression load failed, falling back to bypass:', err)
       if (seq === this.denoiseSeq) {
         this.noiseSuppressionEnabled = false
-        this.crosfadeToBypass()
+        // bypass로 복구
+        try {
+          this.inputSource.disconnect()
+        } catch {
+          // ignore
+        }
+        if (this.denoiseHandle) {
+          try {
+            this.denoiseHandle.node.disconnect()
+          } catch {
+            // ignore
+          }
+        }
+        try {
+          this.inputSource.connect(this.inputGain)
+        } catch {
+          // ignore
+        }
         this.teardownDenoiseNodes()
       }
       return false
     }
   }
 
-  /** 5ms 크로스페이드: denoise 경로 ON / bypass OFF */
-  private crosfadeToDenoise(): void {
-    if (!this.ctx || !this.denoiseInputGain || !this.denoiseBypassGain) return
-    rampGain(this.denoiseInputGain, this.ctx, 1)
-    rampGain(this.denoiseBypassGain, this.ctx, 0)
-  }
-
-  /** 5ms 크로스페이드: bypass ON / denoise OFF */
-  private crosfadeToBypass(): void {
-    if (!this.ctx || !this.denoiseInputGain || !this.denoiseBypassGain) return
-    rampGain(this.denoiseBypassGain, this.ctx, 1)
-    rampGain(this.denoiseInputGain, this.ctx, 0)
-  }
-
-  /** denoise 전용 노드 연결 해제 (bypassGain은 유지 — 재활용) */
+  /** denoise 노드 해제 — 단일 노드만 정리 */
   private teardownDenoiseNodes(): void {
     if (this.denoiseHandle) {
       try {
@@ -564,13 +501,6 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
       }
       disposeHandle(this.denoiseHandle)
       this.denoiseHandle = null
-    }
-    if (this.denoiseInputGain) {
-      try {
-        this.denoiseInputGain.disconnect()
-      } catch {
-        // ignore
-      }
     }
   }
 
@@ -583,14 +513,11 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   }
 
   destroy(): void {
-    // Phase 12 — AudioContext를 닫기 전에 denoise 노드부터 정리 (port/Worklet 누수 방어)
+    // P1-4: denoise -> peerMap -> source -> ctx 순서 고정
     this.teardownDenoiseNodes()
-    this.denoiseBypassGain = null
-    this.denoiseInputGain = null
     this.noiseSuppressionEnabled = false
     this.denoiseSeq++
 
-    // Disconnect & clear peer outputs
     for (const [, entry] of this.peerMap) {
       try {
         entry.source.disconnect()
@@ -646,7 +573,6 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
       this.masterGain = null
     }
     if (this.destination) {
-      // Stop destination tracks
       this.destination.stream.getTracks().forEach((t) => t.stop())
       try {
         this.destination.disconnect()
@@ -659,7 +585,7 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
       const ctx = this.ctx
       this.ctx = null
       void ctx.close().catch(() => {
-        // ignore close failure
+        // ignore
       })
     }
     this.rawInputStream = null

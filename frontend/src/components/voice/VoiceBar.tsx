@@ -64,6 +64,7 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const isNoiseLoading = useVoiceStore((state) => state.isNoiseLoading)
   const noiseError = useVoiceStore((state) => state.noiseError)
   const isDenoiserSupported = useVoiceStore((state) => state.isDenoiserSupported)
+  const selectedAudioDeviceId = useVoiceStore((state) => state.selectedAudioDeviceId)
   const joinVoice = useVoiceStore((state) => state.joinVoice)
   const leaveVoice = useVoiceStore((state) => state.leaveVoice)
   const toggleMute = useVoiceStore((state) => state.toggleMute)
@@ -407,12 +408,12 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
               )}
             </div>
 
-            {audioDevices.length > 1 && (
+            {audioDevices.length > 0 && (
               <select
-                value=""
+                value={selectedAudioDeviceId ?? ''}
+                aria-label="마이크 장치 선택"
                 onChange={(e) => {
                   if (e.target.value) void setDevice(e.target.value)
-                  e.target.value = ''
                 }}
                 className="bg-zinc-800 text-xs text-zinc-300 rounded-full px-3 py-2 focus:outline-none"
               >
