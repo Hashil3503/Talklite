@@ -278,7 +278,8 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     source.connect(gain)
     gain.connect(master)
 
-    // P0-3: Chrome Web Audio 무음 회피 — 숨김 <audio> 병행 재생 (Chromium Issue 1216734)
+    // P0-A: Chrome 무음 회피용 병행 재생 — 디코더만 깨우고 출력은 Web Audio 1곳으로 일원화
+    // audio는 muted:true/volume:0 무음으로 유지 (가청 스피커 출력은 masterGain→ctx.destination 단일 경로)
     let audioEl: HTMLAudioElement | undefined
     if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
       try {
@@ -286,13 +287,12 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
         audio.autoplay = true
         ;(audio as unknown as { playsInline: boolean }).playsInline = true
         audio.style.display = 'none'
-        audio.muted = this.isDeafened
-        audio.volume = 1
+        audio.muted = true
+        audio.volume = 0
         audio.srcObject = stream
-        // body가 없으면 append 생략 (테스트 환경)
         if (document.body) document.body.appendChild(audio)
         void audio.play().catch(() => {
-          // Autoplay 차단 시 voiceStore isAudioAutoplayBlocked 배너로 노출됨
+          // muted이므로 Autoplay 차단 없음 — 실패 무시 (디코더는 play() 호출 자체로 기동)
         })
         audioEl = audio
       } catch {
@@ -340,14 +340,8 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     const entry = this.peerMap.get(peerId)
     if (entry) {
       entry.gain.gain.value = clamped
-      if (entry.audioEl) {
-        try {
-          // HTMLAudioElement volume은 0~1 범위 — Web Audio gain은 0~2이므로 클램프
-          entry.audioEl.volume = Math.min(1, Math.max(0, clamped))
-        } catch {
-          // ignore
-        }
-      }
+      // P0-C: 볼륨 단일화 — 가청 출력은 Web Audio masterGain→destination 단일 경로
+      // audioEl은 항상 muted:true/volume:0 무음 병행 유지이므로 조작하지 않음
     }
   }
 
@@ -373,16 +367,7 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
         this.masterGain.gain.value = this.storedMasterVolume
       }
     }
-    // P0-3: audio 엘리먼트도 deafen 동기화 (Chrome 병행 경로)
-    for (const entry of this.peerMap.values()) {
-      if (entry.audioEl) {
-        try {
-          entry.audioEl.muted = value
-        } catch {
-          // ignore
-        }
-      }
-    }
+    // P0-C: deafen도 Web Audio 단일 경로 — audioEl은 항상 muted:true이므로 추가 동기화 불필요
   }
 
   async resume(): Promise<boolean> {
