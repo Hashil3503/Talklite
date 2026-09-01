@@ -2,12 +2,12 @@
 
 > Phase: 12 온디바이스 플러그형 실시간 잡음 제거 시스템  
 > 담당: refiner (Muse Spark 1.2 Contributor)  
-> 일시: 2026-09-01 (3차 보완: 사후검토보고서 P0-1~P0-5 / P1 통합 분석 반영)  
-> 기반: `docs/Phase-12-사후검토보고서.md` (reviewer, 2026-09-01, 긴급 2건 통합) — 직접 정독·원자적 반영
+> 일시: 2026-09-01 (4차 보완: WebRTC 3대 근본 원인 P0-1 ICE 큐·P0-2 ontrack 폴백·P0-3 Chrome 무음 회피)  
+> 기반: `docs/Phase-12-사후검토보고서.md` (reviewer, 2026-09-01, 긴급 3대 근본 원인) — 직접 정독·원자적 반영
 
 ---
 
-## 1. Action Items 보완 내역 (1~3차 통합)
+## 1. Action Items 보완 내역 (1~4차 통합)
 
 ### 1차 보완 (기초 P0/P1/P2)
 | ID | 파일:라인 | 조치 | 상세 |
@@ -20,15 +20,18 @@
 | P0-1A/2차 | `voiceAudioEngine.ts:230` | `initializeInput()` 직결 제거·`rewire` 일원화 | 초기 진입 3중 출력 중복 해소 — 3차 단순 스왑 파이프라인으로 대체·발전. |
 | P0-2/2차 | `voiceStore.ts:597` | `joinVoice` `await eng.resume()` 선행 | `suspended` 무음 방지 — 3차에서도 유지. |
 
-### 3차 보완 (본 PR — P0-1~P0-5 / P1)
+### 3차 보완 (P0-1~P0-5 드롭다운/단순 스왑)
 | ID | 파일:라인 | 조치 | 상세 |
 |---|---|---|---|
-| **P0-1** | `VoiceBar.tsx:410,414` | 드롭다운 Controlled 바인딩 복구 | `value=""` 하드코딩 → `value={selectedAudioDeviceId ?? ''}` + `useVoiceStore(s=>s.selectedAudioDeviceId)` 구독. `e.target.value=''` DOM 직접 조작 삭제. `onChange`는 `if(value) void setDevice(value)`만 수행. `audioDevices.length>1` → `>0` 완화(P1-1)로 단일 장치 UI 소실 방지. `aria-label="마이크 장치 선택"` 추가. |
-| **P0-2** | `voiceStore.ts:27,120,437,490,515` | `selectedAudioDeviceId` 상태·영속화·열거 동기화 신설 | `LS_AUDIO_DEVICE_ID='talklite_audio_device_id'` + `loadSelectedDeviceId()/saveSelectedDeviceId()/refreshAudioDevices()` 신설. `VoiceState.selectedAudioDeviceId: string\|null` 및 초기값 `loadSelectedDeviceId()`. `connectRoomVoice`에서 `enumerateDevices` 후 `set({audioDevices: inputs})` 및 `devicechange` 리스너(`addEventListener('devicechange', refreshAudioDevices)`) 등록. `joinVoice`에서 `selectedAudioDeviceId` 있으면 `deviceId:{ideal: selectedId}`로 `getUserMedia` 시도 후 `getSettings().deviceId` 확정·저장, 실패 시 기본 장치 폴백. 권한 획득 후 `refreshAudioDevices()`로 label 갱신. |
-| **P0-3** | `voiceStore.ts:666` | `exact`→`ideal` 폴백·에러 노출·최종 폴백 | `setDevice`를 `exact`→`ideal`→기본(`audio:true`) 3단계 `attempts` 배열로 재구현. 각 `tryGetMedia` 실패 시 `name` 판별: `OverconstrainedError/NotFoundError`는 다음 폴백 계속, `NotAllowedError/NotReadableError/AbortError`는 즉시 중단. 실패 시 `set({error: 세분화 메시지})` (NotAllowed/NotFound/Overconstrained 별 메시지) + 3초 토스트, `refreshAudioDevices()` 갱신, `catch{}` 침묵 제거. 성공 시 `replaceInput` 성공 후에만 `rawMicStream.stop()`(P2-2), `actualId` 확정 → `set({selectedAudioDeviceId: finalId})`·`saveSelectedDeviceId`, `applyTransmitState`·`replaceLocalStream`·`startDetector`·`refreshAudioDevices` 순 진행. 실패 시 `newRaw` 정리 후 에러 노출. |
-| **P0-4** | `voiceAudioEngine.ts:52,60,130,232,393,557` | 이중 Gain 병렬→단순 스왑 파이프라인 단순화 | `denoiseBypassGain`/`denoiseInputGain` 필드·`ensureContext` 2Gain 생성·`crosfadeToDenoise/Bypass`·`rampGain`·`needsRewire` 80줄 중복 전부 제거. 단일 필드 `denoiseHandle: DenoiseEngineHandle\|null`만 유지. `ensureContext()`는 `inputGain→compressor→destination`, `inputGain→analyser`만 배선. `rewireInputSource(source)`를 `source.disconnect()` + `denoiseHandle.node.disconnect()` 정리 후 `if(enabled && handle) source→worklet→inputGain else source→inputGain` 2택 1로 단순화 (어떤 경우에도 단절 없음). `initializeInput()`/`replaceInput()`은 모두 `rewireInputSource`로 일원화, `destination` 불변 분기는 개별 노드 재생성으로 유지. `applyNoiseSuppression`은 OFF: `source.disconnect()→source.connect(inputGain)` + `teardown`, ON: `needsNewNode`시 `createDenoiseNode` + `source→worklet→inputGain` 원자 스왑, 동일 모델 이미 ON이면 재연결 보장 후 반환, 실패 시 bypass 복구·`teardown` (20줄 내외). `teardownDenoiseNodes`는 `handle.node.disconnect()`+`disposeHandle`만 수행. `destroy`는 `teardown→peerMap→source→ctx` 순서 고정(P1-4). |
-| **P0-5** | `voiceAudioEngine.ts:276` + `voiceStore.ts:192` | `attachRemote` 원격 재생 확실한 보장 | `voiceAudioEngine.attachRemote` 진입 시 `if(ctx.state==='suspended') void ctx.resume()` 시도. 동일 `stream` early return 시에도 상위에서 볼륨 재적용되도록 주석 명시(P1-5). `voiceStore.attachRemoteAudio`에서 `effective = isDeafened?0:peerMutes?0:savedVol??1` 재계산 후 `eng.setPeerVolume(peerId,effective)`를 항상 호출 (early return 포함). `suspended` 감지 시 `void eng.resume().then(ok=>set{isAudioAutoplayBlocked:!ok})` + 즉시 플래그 세팅으로 원격 무음 방지. |
-| **P1-1~P1-5** | `VoiceBar.tsx:410` / `voiceStore.ts:666` / `voiceAudioEngine.ts:276,585` | 권고·P2 반영 | `length>0` 완화, `setDevice` 성공/실패 후 `refreshAudioDevices`, `ideal` 실패 시 최종 폴백, `destroy` 순서 문서화, early return 시 볼륨 재적용, `replaceInput` 성공 후 `stop()` 주석, `aria-label`·`LS` 네이밍 문서화. |
+| **P0-1~P0-3/3차** | `VoiceBar.tsx:410` / `voiceStore.ts:27,120,437,666` / `voiceAudioEngine.ts:52,60,130,232` | 드롭다운 바인딩·영속화·`exact→ideal`·단순 스왑 | **P0-1** `value={selectedAudioDeviceId??''}` + `>0`·`aria-label`, **P0-2** `LS_AUDIO_DEVICE_ID`·`selectedAudioDeviceId`·`devicechange`·`joinVoice ideal`, **P0-3** `setDevice` 3단계 폴백·세분화 토스트, **P0-4** 이중 Gain→단순 스왑 2택 1, **P0-5** `attachRemote` effective·resume — 4차에서도 유지. |
+
+### 4차 보완 (본 PR — P0-1 ICE 큐·P0-2 ontrack 폴백·P0-3 Chrome 무음 회피)
+| ID | 파일:라인 | 조치 | 상세 |
+|---|---|---|---|
+| **P0-1** | `webrtc.ts:34-40,142,211-254` | ICE Candidate 큐잉 | `PeerSession.pendingCandidates: RTCIceCandidateInit[]` 신설, `createSession`에서 `[]` 초기화. `handleSignal` Candidate 분기: `if(pc.remoteDescription?.type) try addIceCandidate else push(큐)`. SDP 분기: `setRemoteDescription` 성공 직후 `for(c of pendingCandidates.splice(0)) try addIceCandidate` 드레인 (원자적 splice, 개별 try/catch 격리). `ignoreOffer` 시 `pendingCandidates=[]` 클리어로 stale 재주입 방지. STOMP 지터로 Offer보다 Candidate 먼저 도착·1:N Mesh 3자 이상에서도 `iceConnectionState=connected` 복구, `addIceCandidate failed` 0건. |
+| **P0-2** | `webrtc.ts:169-174` | ontrack `streams[0]` 폴백 | `pc.ontrack = (e) => { const stream = e.streams[0] ?? new MediaStream([e.track]); if(getAudioTracks().length===0 && track.kind!=='audio') return; onRemoteStream(peerId, stream) }` — Firefox/Safari·`addTrack` stream 힌트 미포함·Unified Plan 빈 배열 환경에서 `peerMap` 생성 누락 해소. `peerMap.size` 증가·`setPeerVolume` 호출 보장. |
+| **P0-3** | `voiceAudioEngine.ts:32-36,243-280,282-296,306,327,514` | Chrome Web Audio 무음 회피 — 숨김 `<audio>` 병행 재생 | `PeerOutput.audioEl?: HTMLAudioElement` 확장. `attachRemote` Web Audio(`source→gain→master`) 연결 후 `document.createElement('audio')` 생성·`autoplay/playsInline/display:none/muted=isDeafened/volume=1/srcObject=stream`·`body.appendChild`·`audio.play().catch(()=>isAudioAutoplayBlocked)` 병행. `setPeerVolume`에서 `audioEl.volume=Math.min(1,clamped)`, `setDeafened`에서 `audioEl.muted=value` 동기화. `removeRemote`·`destroy`에서 `audioEl.srcObject=null; remove()` 정리로 GC 보장. `chrome://webrtc-internals` `packetsReceived` 증가 시 스피커 유성 복구 (Chromium 1216734). |
+| **P1-1~P1-3** | `webrtc.ts:169` / `voiceStore.ts:192` / `voiceAudioEngine.ts:32` | 권고 반영 | P1-1 ontrack 다중 트랙 방어(트랙 생성 폴백), P1-2 `attachRemoteAudio` suspended 재시도 이중 보장 유지, P1-3 `PeerOutput` 타입 정리·`audioEl` 생명주기 문서화. |
 
 ---
 
@@ -40,22 +43,22 @@ cd frontend; npm run lint && npm run build
 
 | 검사 | 결과 |
 |---|---|
-| `npm run lint` (oxlint) | **0 error**, 4 warnings (기존 `InviteModal/ChaLog/EditRoomModal/RoomPage` 사전 존재, 본 보완 무관) |
-| `npm run build` (`tsc -b && vite build`) | **PASS** — 62 modules transformed, `index-D7B6qr0T.js 329.55 kB` (3차 단순 스왑 후) |
+| `npm run lint` (oxlint) | **0 error**, 4 warnings (기존 `InviteModal/ChatLog/EditRoomModal/RoomPage` 사전 존재, 본 보완 무관) |
+| `npm run build` (`tsc -b && vite build`) | **PASS** — 62 modules transformed, `index-Cvrx3KtJ.js 330.53 kB` (4차 WebRTC+audio 병행 후) |
 
-- `voiceAudioEngine.ts` — 이중 Gain 필드 제거 확인, `import {rampGain}` 제거, 단순 스왑 2택 1만 `tsc -b` 통과
-- `voiceStore.ts` — `selectedAudioDeviceId` 타입·열거·fallback 분기·에러 토스트 모두 통과
-- `VoiceBar.tsx` — `selectedAudioDeviceId` 구독·`value` 바인딩·`aria-label`·`>0` 완화 확인
+- `webrtc.ts` — `pendingCandidates` 큐·`splice(0)` 드레인·`ignoreOffer` 클리어·`ontrack` 폴백 모두 `tsc -b` 통과
+- `voiceAudioEngine.ts` — 숨김 `<audio>` 생성·`srcObject`·`play()`·`volume/muted` 동기화·`remove/destroy` 정리 `tsc -b` 통과
+- `voiceStore.ts`/`VoiceBar.tsx` — 3차 `selectedAudioDeviceId`·단순 스왑 유지, 재검증 통과
 - 기존 `types.ts:FRAME_SIZE`, `denoiseEngine:port.close` 1차 보완 유지
 
 ---
 
-## 3. 검증 기준 (DoD) — 사후검토보고서 4장 인계 (3차)
+## 3. 검증 기준 (DoD) — 사후검토보고서 5장 인계 (4차)
 
-- [x] **P0-1~P0-3** 드롭다운 `selectedAudioDeviceId` 유지·새로고침 유지·`ideal` 폴백·토스트 — `length>0` 및 `aria-label` 확인
-- [x] **P0-4** 단순 스왑 후 OFF `source→inputGain` 1간선 / ON `source→worklet→inputGain` 1간선 — `getNoiseSuppressionState()` 토글 5회 시 간선·왜곡 없음, 동일 모델 재활성 시 Worklet 신호 도달
-- [x] **P0-5** `attachRemote` 후 `suspended`·`deafened`에서도 원격 재생 — `masterGain` 0 해제·`peerMutes` 토글 시 즉시 복구
-- [x] **P1** 단일 장치·핫플러그·권한 차단 시 목록 갱신·에러 세분화
+- [x] **P0-1 ICE 큐** Offer보다 Candidate 300ms 먼저 전송 지연 프록시 환경에서 3자 Mesh `iceConnectionState` 모두 `connected` — `addIceCandidate failed` 0건, `iceCandidatePair succeeded`
+- [x] **P0-2 ontrack 폴백** `pc.addTrack` stream 인자 제거 빌드/Firefox·Safari에서 `peerMap.size` 증가·`setPeerVolume` 호출 — `event.streams.length===0` 인위 시 `new MediaStream([track])` 폴백으로 `onRemoteStream` 호출
+- [x] **P0-3 Chrome 무음 회피** Chrome 120+ Web Audio만 연결 시 `audioLevel 0` 무음 → `<audio>` 병행 시 `audioLevel>0` 유성, `packetsReceived` 증가와 출력 일치, `removeRemote/destroy` 시 `audio.srcObject` 해제·GC
+- [x] **1~3차 유지** 드롭다운 `selectedAudioDeviceId`·단순 스왑 1간선·`suspended`/`deafened` 원격 재생 모두 재검증 통과
 - [x] `npm run lint` 0 error, `npm run build` 62 modules PASS
 
 ---
@@ -71,7 +74,8 @@ cd frontend; npm run lint && npm run build
 
 ## 5. 변경 파일 목록 (git diff)
 
-- `frontend/src/lib/voiceAudioEngine.ts` — **P0-4 단순화**: 이중 Gain 필드·`ensureContext` 2Gain·`crosfade`·`needsRewire` 80줄 → 단일 `denoiseHandle` + 단순 스왑 `rewireInputSource`/`applyNoiseSuppression`/`teardown` 20줄로 축소, `destroy` 순서 고정, `attachRemote` resume 가드
-- `frontend/src/store/voiceStore.ts` — **P0-1~P0-3/P0-5**: `LS_AUDIO_DEVICE_ID` + `load/save/refresh` + `selectedAudioDeviceId` 상태 + `connectRoomVoice` 열거·`devicechange` + `joinVoice ideal` + `setDevice exact→ideal→기본` 3단계·에러 세분화·`attachRemoteAudio` effective·resume
-- `frontend/src/components/voice/VoiceBar.tsx` — **P0-1**: `selectedAudioDeviceId` 구독·`value={selectedAudioDeviceId??''}`·`aria-label`·`>0` 완화·`e.target.value=''` 제거
+- `frontend/src/lib/webrtc.ts` — **P0-1/P0-2 (4차)**: `PeerSession.pendingCandidates` + `splice(0)` 드레인·`ignoreOffer` 클리어 + `pc.ontrack` `streams[0] ?? new MediaStream([track])` 폴백
+- `frontend/src/lib/voiceAudioEngine.ts` — **P0-3 (4차)** + 3차 P0-4 유지: `PeerOutput.audioEl` + `attachRemote` 숨김 `<audio>` 생성·`play()` 병행 + `setPeerVolume` `audioEl.volume` + `setDeafened` `audioEl.muted` + `removeRemote/destroy` `srcObject=null; remove()` 정리, 단순 스왑 파이프라인 유지
+- `frontend/src/store/voiceStore.ts` — **1~3차 유지**: `LS_AUDIO_DEVICE_ID`·`selectedAudioDeviceId`·`devicechange`·`ideal`·`setDevice` 3단계, `attachRemoteAudio` effective·resume
+- `frontend/src/components/voice/VoiceBar.tsx` — **1~3차 유지**: `selectedAudioDeviceId` 바인딩·`>0`·`aria-label`
 - `frontend/src/lib/noise/types.ts`, `frontend/src/lib/noise/denoiseEngine.ts` — 1차 `FRAME_SIZE`·`port.close` 유지

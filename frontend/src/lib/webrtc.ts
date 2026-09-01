@@ -37,6 +37,7 @@ interface PeerSession {
   makingOffer: boolean
   ignoreOffer: boolean
   isSettingRemoteAnswer: boolean
+  pendingCandidates: RTCIceCandidateInit[]
 }
 
 /**
@@ -147,6 +148,7 @@ export class WebRtcManager {
       makingOffer: false,
       ignoreOffer: false,
       isSettingRemoteAnswer: false,
+      pendingCandidates: [],
     }
 
     pc.onicecandidate = (event) => {
@@ -167,10 +169,9 @@ export class WebRtcManager {
     }
 
     pc.ontrack = (event) => {
-      const stream = event.streams[0]
-      if (stream) {
-        this.opts.onRemoteStream(remoteId, stream)
-      }
+      const stream = event.streams[0] ?? new MediaStream([event.track])
+      if (stream.getAudioTracks().length === 0 && event.track.kind !== 'audio') return
+      this.opts.onRemoteStream(remoteId, stream)
     }
 
     pc.onconnectionstatechange = () => {
@@ -220,12 +221,26 @@ export class WebRtcManager {
       }
       const offerCollision = description.type === 'offer' && (session.makingOffer || session.pc.signalingState !== 'stable')
       session.ignoreOffer = !session.polite && offerCollision
-      if (session.ignoreOffer) return
+      if (session.ignoreOffer) {
+        // P0-1: polite 충돌로 Offer 버릴 때 큐도 클리어 (stale 후보 재주입 방지)
+        session.pendingCandidates = []
+        return
+      }
       session.isSettingRemoteAnswer = description.type === 'answer'
       try {
         await session.pc.setRemoteDescription(description)
       } finally {
         session.isSettingRemoteAnswer = false
+      }
+      // P0-1: remoteDescription 전 큐잉된 Candidate 드레인 (원자적 splice)
+      for (const c of session.pendingCandidates.splice(0)) {
+        try {
+          await session.pc.addIceCandidate(c)
+        } catch (err) {
+          if (!session.ignoreOffer) {
+            console.error('[webrtc] addIceCandidate failed for', remoteId, err)
+          }
+        }
       }
       if (description.type === 'offer') {
         await session.pc.setLocalDescription()
@@ -243,12 +258,18 @@ export class WebRtcManager {
     }
 
     if (signal.candidate) {
-      try {
-        await session.pc.addIceCandidate(signal.candidate as RTCIceCandidateInit)
-      } catch (err) {
-        if (!session.ignoreOffer) {
-          console.error('[webrtc] addIceCandidate failed for', remoteId, err)
+      const cand = signal.candidate as RTCIceCandidateInit
+      // P0-1: remoteDescription 없으면 큐잉, 있으면 즉시 시도
+      if (session.pc.remoteDescription && session.pc.remoteDescription.type) {
+        try {
+          await session.pc.addIceCandidate(cand)
+        } catch (err) {
+          if (!session.ignoreOffer) {
+            console.error('[webrtc] addIceCandidate failed for', remoteId, err)
+          }
         }
+      } else {
+        session.pendingCandidates.push(cand)
       }
     }
   }

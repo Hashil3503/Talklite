@@ -33,6 +33,7 @@ interface PeerOutput {
   source: MediaStreamAudioSourceNode
   gain: GainNode
   stream: MediaStream
+  audioEl?: HTMLAudioElement
 }
 
 export class VoiceAudioEngineImpl implements VoiceAudioEngine {
@@ -276,12 +277,43 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     gain.gain.value = 1
     source.connect(gain)
     gain.connect(master)
-    this.peerMap.set(peerId, { source, gain, stream })
+
+    // P0-3: Chrome Web Audio 무음 회피 — 숨김 <audio> 병행 재생 (Chromium Issue 1216734)
+    let audioEl: HTMLAudioElement | undefined
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      try {
+        const audio = document.createElement('audio')
+        audio.autoplay = true
+        ;(audio as unknown as { playsInline: boolean }).playsInline = true
+        audio.style.display = 'none'
+        audio.muted = this.isDeafened
+        audio.volume = 1
+        audio.srcObject = stream
+        // body가 없으면 append 생략 (테스트 환경)
+        if (document.body) document.body.appendChild(audio)
+        void audio.play().catch(() => {
+          // Autoplay 차단 시 voiceStore isAudioAutoplayBlocked 배너로 노출됨
+        })
+        audioEl = audio
+      } catch {
+        // ignore — audio 생성 실패 시 Web Audio 경로만 유지
+      }
+    }
+
+    this.peerMap.set(peerId, { source, gain, stream, audioEl })
   }
 
   removeRemote(peerId: string): void {
     const entry = this.peerMap.get(peerId)
     if (!entry) return
+    if (entry.audioEl) {
+      try {
+        entry.audioEl.srcObject = null
+        entry.audioEl.remove()
+      } catch {
+        // ignore
+      }
+    }
     try {
       entry.source.disconnect()
     } catch {
@@ -308,6 +340,14 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     const entry = this.peerMap.get(peerId)
     if (entry) {
       entry.gain.gain.value = clamped
+      if (entry.audioEl) {
+        try {
+          // HTMLAudioElement volume은 0~1 범위 — Web Audio gain은 0~2이므로 클램프
+          entry.audioEl.volume = Math.min(1, Math.max(0, clamped))
+        } catch {
+          // ignore
+        }
+      }
     }
   }
 
@@ -326,11 +366,22 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
 
   setDeafened(value: boolean): void {
     this.isDeafened = value
-    if (!this.masterGain) return
-    if (value) {
-      this.masterGain.gain.value = 0
-    } else {
-      this.masterGain.gain.value = this.storedMasterVolume
+    if (this.masterGain) {
+      if (value) {
+        this.masterGain.gain.value = 0
+      } else {
+        this.masterGain.gain.value = this.storedMasterVolume
+      }
+    }
+    // P0-3: audio 엘리먼트도 deafen 동기화 (Chrome 병행 경로)
+    for (const entry of this.peerMap.values()) {
+      if (entry.audioEl) {
+        try {
+          entry.audioEl.muted = value
+        } catch {
+          // ignore
+        }
+      }
     }
   }
 
@@ -513,12 +564,20 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   }
 
   destroy(): void {
-    // P1-4: denoise -> peerMap -> source -> ctx 순서 고정
+    // P1-4: denoise -> peerMap -> source -> ctx 순서 고정 (+ audioEl 정리)
     this.teardownDenoiseNodes()
     this.noiseSuppressionEnabled = false
     this.denoiseSeq++
 
     for (const [, entry] of this.peerMap) {
+      if (entry.audioEl) {
+        try {
+          entry.audioEl.srcObject = null
+          entry.audioEl.remove()
+        } catch {
+          // ignore
+        }
+      }
       try {
         entry.source.disconnect()
       } catch {
