@@ -26,7 +26,6 @@ export interface DenoiseEngineHandle {
 
 /** worklet 프로세서 파일 URL (public/wasm/ 서빙) */
 const WORKLET_URLS: Record<NoiseSuppressionModel, string> = {
-  rnnoise: '/wasm/rnnoise-worklet.js',
   deepfilternet: '/wasm/deepfilternet-worklet.js',
   speex: '/wasm/speex-worklet.js',
 }

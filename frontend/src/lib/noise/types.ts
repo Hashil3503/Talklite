@@ -3,14 +3,13 @@
  * 3종 엔진: RNNoise(게이밍) / DeepFilterNet(스튜디오) / Speex(초절전)
  */
 
-export type NoiseSuppressionModel = 'rnnoise' | 'deepfilternet' | 'speex'
+export type NoiseSuppressionModel = 'deepfilternet' | 'speex'
 
-export const NOISE_SUPPRESSION_MODELS: readonly NoiseSuppressionModel[] = ['rnnoise', 'deepfilternet', 'speex'] as const
+export const NOISE_SUPPRESSION_MODELS: readonly NoiseSuppressionModel[] = ['deepfilternet', 'speex'] as const
 
 export const NOISE_MODEL_META: Record<NoiseSuppressionModel, { label: string; description: string }> = {
-  rnnoise: { label: 'RNNoise', description: '게이밍 최적화 · 키보드 타건음 차단 · 저CPU' },
-  deepfilternet: { label: 'DeepFilterNet', description: '스튜디오 음질 · 음색 보존 · 고사양 권장' },
-  speex: { label: 'Speex DSP', description: '초절전 · 지속 노이즈(팬/에어컨) 전용' },
+  deepfilternet: { label: 'DeepFilterNet (권장)', description: '스튜디오 음질 · 음색 보존 · 실시간 잡음 제거' },
+  speex: { label: 'Speex DSP (초절전)', description: '선풍기/에어컨/팬 소음 전용 초저부하 필터' },
 }
 
 /** 화이트리스트 검증: localStorage 등 외부 입력에서 안전하게 모델 복원 */

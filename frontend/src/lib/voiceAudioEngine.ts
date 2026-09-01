@@ -56,7 +56,7 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   private denoiseHandle: DenoiseEngineHandle | null = null
   private denoiseSeq = 0
   private noiseSuppressionEnabled = false
-  private noiseSuppressionModel: NoiseSuppressionModel = 'rnnoise'
+  private noiseSuppressionModel: NoiseSuppressionModel = 'deepfilternet'
 
   private ensureContext(): AudioContext {
     if (this.ctx) return this.ctx
