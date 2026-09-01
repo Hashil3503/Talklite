@@ -133,7 +133,7 @@ function loadAiNoiseModel(): NoiseSuppressionModel {
   } catch {
     /* ignore */
   }
-  return 'rnnoise'
+  return 'deepfilternet'
 }
 function saveAiNoiseEnabled(enabled: boolean): void {
   try {
