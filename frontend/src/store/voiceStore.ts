@@ -25,6 +25,7 @@ const LS_PTT_KEY = 'talklite_ptt_key'
 // Phase 12 — AI 잡음 제거 영구 기억 (화이트리스트 검증)
 const LS_AI_NOISE_ENABLED = 'talklite_ai_noise_enabled'
 const LS_AI_NOISE_MODEL = 'talklite_ai_noise_model'
+const LS_AUDIO_DEVICE_ID = 'talklite_audio_device_id'
 
 let inputGainTimer: ReturnType<typeof setTimeout> | null = null
 let masterTimer: ReturnType<typeof setTimeout> | null = null
@@ -149,6 +150,34 @@ function saveAiNoiseModel(model: NoiseSuppressionModel): void {
   }
 }
 
+function loadSelectedDeviceId(): string | null {
+  try {
+    const raw = localStorage.getItem(LS_AUDIO_DEVICE_ID)
+    if (raw && typeof raw === 'string' && raw.length > 0) return raw
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+function saveSelectedDeviceId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(LS_AUDIO_DEVICE_ID, id)
+    else localStorage.removeItem(LS_AUDIO_DEVICE_ID)
+  } catch {
+    /* ignore */
+  }
+}
+async function refreshAudioDevices(): Promise<void> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    const inputs = devices.filter((d) => d.kind === 'audioinput')
+    useVoiceStore.setState({ audioDevices: inputs })
+    // 동기화: 저장된 selectedId가 목록에 없으면 유지하되, 목록이 비어있지 않으면 불일치 경고만 (자동 리셋 안 함)
+  } catch {
+    // ignore
+  }
+}
+
 function debouncedSaveInputGain(value: number): void {
   if (inputGainTimer) clearTimeout(inputGainTimer)
   inputGainTimer = setTimeout(() => {
@@ -193,14 +222,19 @@ function attachRemoteAudio(peerId: string, stream: MediaStream): void {
   const eng = ensureEngine()
   eng.attachRemote(peerId, stream)
   const state = useVoiceStore.getState()
-  const savedVol = state.peerVolumes[peerId]
-  if (savedVol !== undefined) {
-    eng.setPeerVolume(peerId, savedVol)
-  }
-  if (state.peerMutes[peerId]) {
-    eng.setPeerVolume(peerId, 0)
-  }
+  // P0-5: effective 볼륨 재계산 — deafen/mute/savedVol 반영을 항상 보장 (early return 시에도 적용되도록 engine 측에서도 처리)
+  const effective = state.isDeafened
+    ? 0
+    : state.peerMutes[peerId]
+      ? 0
+      : (state.peerVolumes[peerId] ?? 1)
+  eng.setPeerVolume(peerId, effective)
   if (eng.getContextState() === 'suspended') {
+    // 원격 무음 방지 — resume 시도 (실패 시 배너)
+    void eng.resume().then((ok) => {
+      useVoiceStore.setState({ isAudioAutoplayBlocked: !ok })
+    })
+    // 즉시 플래그도 세워 배너 노출 가능
     useVoiceStore.setState({ isAudioAutoplayBlocked: true })
   }
 }
@@ -441,6 +475,7 @@ interface VoiceState {
   voiceMembers: string[]
   speakingUsers: Record<string, boolean>
   audioDevices: MediaDeviceInfo[]
+  selectedAudioDeviceId: string | null
   error: string | null
   isAudioAutoplayBlocked: boolean
   // Phase 8 volumes
@@ -494,6 +529,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   voiceMembers: [],
   speakingUsers: {},
   audioDevices: [],
+  selectedAudioDeviceId: loadSelectedDeviceId(),
   error: null,
   isAudioAutoplayBlocked: false,
   inputGain: loadInputGain(),
@@ -529,9 +565,24 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     })
     try {
       const devices = await navigator.mediaDevices.enumerateDevices()
-      set({ audioDevices: devices.filter((d) => d.kind === 'audioinput') })
+      const inputs = devices.filter((d) => d.kind === 'audioinput')
+      set({ audioDevices: inputs })
+      // selectedAudioDeviceId가 목록에 없으면 유지 (핫플러그 재연결 대비), 목록이 비어있지 않으면 불일치 무시
     } catch {
       set({ audioDevices: [] })
+    }
+    // devicechange 동기화 리스너 등록 (중복 방지)
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.addEventListener) {
+      try {
+        navigator.mediaDevices.removeEventListener('devicechange', refreshAudioDevices)
+      } catch {
+        // ignore
+      }
+      try {
+        navigator.mediaDevices.addEventListener('devicechange', refreshAudioDevices)
+      } catch {
+        // ignore
+      }
     }
   },
 
@@ -579,14 +630,53 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const client = await ensureStompConnected()
       stompClient = client
 
-      const rawStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      })
+      // P0-2: selectedAudioDeviceId가 있으면 ideal로 선호 장치 시도, 없으면 기본 장치
+      const preferredDeviceId = get().selectedAudioDeviceId
+      let rawStream: MediaStream
+      if (preferredDeviceId) {
+        try {
+          rawStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              deviceId: { ideal: preferredDeviceId },
+            },
+          })
+          // 실제 선택된 장치 확정 — getSettings().deviceId가 ideal과 다를 수 있음
+          const actualId = rawStream.getAudioTracks()[0]?.getSettings()?.deviceId as string | undefined
+          if (actualId) {
+            set({ selectedAudioDeviceId: actualId })
+            saveSelectedDeviceId(actualId)
+          }
+        } catch {
+          // ideal 실패 시 기본 장치로 폴백
+          rawStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          })
+          const fallbackId = rawStream.getAudioTracks()[0]?.getSettings()?.deviceId as string | undefined
+          if (fallbackId) {
+            set({ selectedAudioDeviceId: fallbackId })
+            saveSelectedDeviceId(fallbackId)
+          }
+        }
+      } else {
+        rawStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        })
+        const actualId = rawStream.getAudioTracks()[0]?.getSettings()?.deviceId as string | undefined
+        if (actualId) {
+          set({ selectedAudioDeviceId: actualId })
+          saveSelectedDeviceId(actualId)
+        }
+      }
       rawMicStream = rawStream
+      // 장치 목록 최신화 (권한 획득 후 label 확보)
+      void refreshAudioDevices()
 
       const eng = ensureEngine()
       const { inputGain, masterVolume } = get()
@@ -666,28 +756,75 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   setDevice: async (deviceId: string) => {
     const eng = engine
     if (!rawMicStream || !manager || !activeRoomId || !eng) return
+    if (!deviceId || typeof deviceId !== 'string') return
+    const tryGetMedia = async (constraint: MediaTrackConstraints): Promise<MediaStream> => {
+      return navigator.mediaDevices.getUserMedia({ audio: constraint })
+    }
+    let newRaw: MediaStream | null = null
+    let lastErr: unknown = null
+    // P0-3: exact -> ideal -> 기본 폴백 3단계
+    const attempts: MediaTrackConstraints[] = [
+      { echoCancellation: true, noiseSuppression: true, autoGainControl: true, deviceId: { exact: deviceId } },
+      { echoCancellation: true, noiseSuppression: true, autoGainControl: true, deviceId: { ideal: deviceId } },
+      { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    ]
+    for (const constraint of attempts) {
+      try {
+        newRaw = await tryGetMedia(constraint)
+        break
+      } catch (e) {
+        lastErr = e
+        const name = (e as { name?: string })?.name
+        // exact에서 OverconstrainedError/NotFoundError면 ideal로 재시도, 그 외는 다음 폴백 계속
+        if (name !== 'OverconstrainedError' && name !== 'NotFoundError' && name !== 'OverconstrainedError') {
+          // 마지막이 아니면 계속, 마지막이면 에러 처리로 진행
+        }
+        // NotAllowedError 등은 즉시 중단하고 에러 노출
+        if (name === 'NotAllowedError' || name === 'NotReadableError' || name === 'AbortError') {
+          break
+        }
+      }
+    }
+    if (!newRaw) {
+      const name = (lastErr as { name?: string; message?: string })?.name ?? 'UnknownError'
+      const msg = (lastErr as { message?: string })?.message ?? ''
+      let userMsg = `마이크 전환 실패: ${name}${msg ? ` — ${msg}` : ''}`
+      if (name === 'NotAllowedError') userMsg = '마이크 권한이 거부되었습니다. 브라우저 권한을 확인해 주세요.'
+      if (name === 'NotFoundError') userMsg = '선택한 마이크 장치를 찾을 수 없습니다.'
+      if (name === 'OverconstrainedError') userMsg = '선택한 마이크를 사용할 수 없어 기본 장치로 전환을 시도했습니다.'
+      set({ error: userMsg })
+      // P1-2: 실패 후에도 목록 갱신
+      void refreshAudioDevices()
+      // 3초 후 에러 토스트 자동 해제
+      setTimeout(() => {
+        const cur = get().error
+        if (cur === userMsg) set({ error: null })
+      }, 3000)
+      return
+    }
     try {
-      const newRaw = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-        },
-      })
       const processed = eng.replaceInput(newRaw)
+      // P2-2: replaceInput 성공 후에만 기존 트랙 정리
       rawMicStream.getAudioTracks().forEach((t) => t.stop())
       rawMicStream = newRaw
+      const actualId = newRaw.getAudioTracks()[0]?.getSettings()?.deviceId as string | undefined
+      const finalId = actualId ?? deviceId
+      set({ selectedAudioDeviceId: finalId, error: null })
+      saveSelectedDeviceId(finalId)
       applyTransmitState()
-      // processed가 동일 객체지만 enabled 상태 보정
       const should = !get().isMuted && (get().inputMode === 'voice_activity' || get().isPttActive)
       processed.getAudioTracks().forEach((t) => {
         t.enabled = should
       })
       await manager.replaceLocalStream(processed)
       startDetector(activeRoomId)
-    } catch {
-      // 장치 전환 실패 — 현재 장치 유지
+      void refreshAudioDevices()
+    } catch (e) {
+      // replaceInput/replaceTrack 실패
+      newRaw.getAudioTracks().forEach((t) => t.stop())
+      const detail = e instanceof Error ? e.message : String(e)
+      set({ error: `마이크 전환 실패: ${detail}` })
+      setTimeout(() => set({ error: null }), 3000)
     }
   },
 
