@@ -65,13 +65,15 @@ graph TD
 * **수행 내용**:
   1. `git diff`를 정밀 분석하여 코드 품질, 잠재적 버그, 리소스 해제 누락, UI 접근성 점검 (코드 수정 금지)
   2. 수정이 필요한 구체적인 항목(P0/P1/P2 Action Items)과 파일 위치, 라인 번호, 개선 가이드를 **`docs/Phase-X-사후검토보고서.md`** 파일로 직접 작성하여 저장
+  3. **⚠️ [누적 기록(Append-Only) 원칙]**: 추가 이슈 발생 시 기존 내용을 덮어쓰지 않고 `## [Round X]` 형태로 누적(Append) 기록하여 모든 분석 히스토리를 영구 보존
 
 ### 📌 Step 6: 사후 보완 (Post-Implementation Polish)
 * **주관**: `refiner` (보완 작업, `w1J:p5`)  *(※ 리파이너는 보완 코드 작성 전담)*
 * **수행 내용**:
   1. `supervisor`로부터 검토 보고서 파일 경로를 전달받아, **`docs/Phase-X-사후검토보고서.md` 문서를 직접 열람 및 정독**
   2. 보고서에 기술된 Action Items(P0/P1/P2)를 빠짐없이 실제 소스코드에 반영 (리팩토링, 엣지 케이스 가드 적용, 디바운스/핫스왑 최적화)
-  3. 프론트엔드 린트 0 error 및 빌드 통과 재확인 후 `supervisor`에게 최종 인계
+  3. **`docs/Phase-X-보완보고서.md`** 역시 차수별 누적으로 보존
+  4. 프론트엔드 린트 0 error 및 빌드 통과 재확인 후 `supervisor`에게 최종 인계
 
 ### 📌 Step 7: 최종 승인 및 다음 마일스톤 (Final Approval & Handoff)
 * **주관**: `supervisor` (총괄 감독, `w1J:p4`)
