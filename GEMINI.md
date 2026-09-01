@@ -13,8 +13,8 @@
 | :--- | :---: | :---: | :---: | :---: | :--- |
 | **`supervisor`** | `w1J:p4` | `agy` | — | **👑 총괄 감독<br>(Supervisor)** | • 전체 마일스톤 개발 라이프사이클 조율 및 단계별 품질 게이트 승인<br>• `implementer`, `reviewer`, `refiner`에게 명확한 태스크 지시 및 의사결정<br>• 백엔드 전체 회귀 테스트(`mvn test`) 및 프론트 빌드/린트 무결성 최종 검증<br>• **`docs/Phase-X-완료보고서.md` 간략 완료 보고서 작성**<br>• 위키, 인수인계서, CodeGraph, QMD, Git 원격 푸시 최종 동기화 총괄 |
 | **`implementer`** | `w1J:p1` | `opencode` | **camelStream Auto**<br>(Provider: `camelStream`) | **🛠️ 메인 구현<br>(Implementer)** | • 위키 실행 계획서 및 핵심설계 해석본에 기반한 코어 코드(백/프론트) 본 구현<br>• 핵심 클래스/컴포넌트/스토어 신설 및 1차 기능 완결<br>• 단위 린트 및 빌드 검증 (`npm run lint`, `npm run build`, `mvn test-compile`) 1차 완료 후 핸드오프 |
-| **`reviewer`** | `w1J:p3` | `opencode` | **Muse Spark 1.2 Contributor**<br>(Provider: `OpenCode Go`) | **🔍 코드 검토<br>(Reviewer)** | • **[검토 전담] 직접 코드를 수정하지 않고 오직 정밀 검토/분석 및 피드백 도출만 수행**<br>• 사전 설계 타당성 및 사후 구현 코드 diff 심층 분석<br>• 리소스 수명주기 관리 및 메모리 누수 방어 여부 검토 (Node disconnect, Event listener 해제 등)<br>• 에러 핸들링, 비정상 단절 처리, 접근성(a11y), 엣지 케이스 도출 및 체크리스트 작성 |
-| **`refiner`** | `w1J:p5` | `opencode` | **Muse Spark 1.2 Contributor**<br>(Provider: `OpenCode Go`) | **✨ 보완 작업<br>(Refiner)** | • **[보완 전담] `reviewer`의 검토 보고서와 피드백을 바탕으로 실제 코드 수정 및 보완 작업만 전담 수행**<br>• 브라우저 크로스 플랫폼(Chrome, Safari/WebKit, Firefox) 및 WebRTC/실시간 네트워크 호환성 검증 및 반영<br>• 핫스왑/디바운스/가드 최적화 및 엣지 케이스 방어 가드 코드 적용<br>• 린트 0 error 및 빌드 무결성 유지 상태로 감독(`supervisor`)에게 인계 |
+| **`reviewer`** | `w1J:p3` | `opencode` | **Muse Spark 1.2 Contributor**<br>(Provider: `OpenCode Go`) | **🔍 코드 검토<br>(Reviewer)** | • **[검토 전담] 직접 코드를 수정하지 않고 오직 정밀 검토/분석 및 보고서 문서 작성만 수행**<br>• 사전 설계 및 사후 diff 심층 분석 결과를 **`docs/Phase-X-사전검토보고서.md`** 및 **`docs/Phase-X-사후검토보고서.md`** 파일로 직접 작성하여 보존<br>• 리소스 수명주기 관리 및 메모리 누수 방어 여부 검토 (Node disconnect, Event listener 해제 등)<br>• 에러 핸들링, 비정상 단절 처리, 접근성(a11y), 엣지 케이스 도출 및 체크리스트 작성 |
+| **`refiner`** | `w1J:p5` | `opencode` | **Muse Spark 1.2 Contributor**<br>(Provider: `OpenCode Go`) | **✨ 보완 작업<br>(Refiner)** | • **[보완 전담] `reviewer`가 작성한 검토 보고서 파일(`docs/Phase-X-사후검토보고서.md`)을 직접 정독하고 실제 코드 수정 및 보완 작업만 전담 수행 (간략화된 프롬프트 전달 지양)**<br>• 브라우저 크로스 플랫폼(Chrome, Safari/WebKit, Firefox) 및 WebRTC/실시간 네트워크 호환성 검증 및 반영<br>• 핫스왑/디바운스/가드 최적화 및 엣지 케이스 방어 가드 코드 적용<br>• 린트 0 error 및 빌드 무결성 유지 상태로 감독(`supervisor`)에게 인계 |
 
 ---
 
@@ -45,12 +45,12 @@ graph TD
 * **수행 내용**:
   1. `supervisor`가 `reviewer`에게 실행 계획서 및 핵심설계 해석본에 대한 사전 설계 검토 요청
   2. 아키텍처 결함, 브라우저 API 제약사항, WebRTC/STOMP 충돌 가능성, 성능 병목 사전 도출
-  3. 사전 피드백 및 보완 요구사항 보고서 제출 (코드 수정 일체 금지)
+  3. **`docs/Phase-X-사전검토보고서.md`** 파일로 상세 분석 보고서 작성 및 저장 (코드 수정 일체 금지)
 
 ### 📌 Step 3: 사전 보완 (Pre-Implementation Refinement)
 * **주관**: `supervisor` (총괄 감독, `w1J:p4`)
 * **수행 내용**:
-  1. 검토된 피드백을 수렴하여 위키 실행 계획서 및 핵심설계 해석본에 반영 최신화
+  1. 작성된 사전검토보고서(`docs/Phase-X-사전검토보고서.md`) 피드백을 수렴하여 위키 실행 계획서 및 핵심설계 해석본에 반영 최신화
   2. `implementer`가 구현 시 지켜야 할 명확한 기술 스펙 및 규칙 확정
 
 ### 📌 Step 4: 구현 시작 (Main Implementation)
@@ -64,13 +64,13 @@ graph TD
 * **주관**: `reviewer` (코드 검토, `w1J:p3`)  *(※ 리뷰어는 검토만 전담)*
 * **수행 내용**:
   1. `git diff`를 정밀 분석하여 코드 품질, 잠재적 버그, 리소스 해제 누락, UI 접근성 점검 (코드 수정 금지)
-  2. 수정이 필요한 구체적인 항목(Action Items)을 우선순위별로 정리하여 보고서 작성 및 전달
+  2. 수정이 필요한 구체적인 항목(P0/P1/P2 Action Items)과 파일 위치, 라인 번호, 개선 가이드를 **`docs/Phase-X-사후검토보고서.md`** 파일로 직접 작성하여 저장
 
 ### 📌 Step 6: 사후 보완 (Post-Implementation Polish)
 * **주관**: `refiner` (보완 작업, `w1J:p5`)  *(※ 리파이너는 보완 코드 작성 전담)*
 * **수행 내용**:
-  1. `reviewer`의 검토 보고서와 `supervisor`의 보완 지시에 따라 코드 리팩토링 및 엣지 케이스 방어 가드 직접 적용
-  2. 디바운스, 핫스왑, 에러 폴백, 키보드/스크린리더 접근성 등 완성도 제고
+  1. `supervisor`로부터 검토 보고서 파일 경로를 전달받아, **`docs/Phase-X-사후검토보고서.md` 문서를 직접 열람 및 정독**
+  2. 보고서에 기술된 Action Items(P0/P1/P2)를 빠짐없이 실제 소스코드에 반영 (리팩토링, 엣지 케이스 가드 적용, 디바운스/핫스왑 최적화)
   3. 프론트엔드 린트 0 error 및 빌드 통과 재확인 후 `supervisor`에게 최종 인계
 
 ### 📌 Step 7: 최종 승인 및 다음 마일스톤 (Final Approval & Handoff)
