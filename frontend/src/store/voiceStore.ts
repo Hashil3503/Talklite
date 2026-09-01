@@ -595,6 +595,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       eng.setDeafened(get().isDeafened)
 
       const processed = eng.initializeInput(rawStream)
+      // P0-2: AudioContext suspended 무음 방어 — 제스처 체인 내부에서 resume 선행 (실패 시에만 배너)
+      const resumeOk = await eng.resume()
       // 초기 송신 상태 적용 (PTT 모드면 무음, voice_activity면 송신)
       applyTransmitState()
       // Mute 상태 동기화 보조: applyTransmitState가 이미 처리하지만, 초기 false 보장
@@ -623,11 +625,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         }
       }
       stompClient.publish({ destination: `/app/room/${roomId}/voice/start`, body: '{}' })
-      if (eng.getContextState() === 'suspended') {
-        set({ isInVoice: true, isMuted: false, isDeafened: false, error: null, isAudioAutoplayBlocked: true })
-      } else {
-        set({ isInVoice: true, isMuted: false, isDeafened: false, error: null, isAudioAutoplayBlocked: false })
-      }
+      set({
+        isInVoice: true,
+        isMuted: false,
+        isDeafened: false,
+        error: null,
+        isAudioAutoplayBlocked: !resumeOk,
+      })
       // 재적용 (isMuted 리셋 후)
       applyTransmitState()
     } catch (err: unknown) {
