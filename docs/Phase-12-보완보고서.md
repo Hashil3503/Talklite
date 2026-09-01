@@ -2,12 +2,12 @@
 
 > Phase: 12 온디바이스 플러그형 실시간 잡음 제거 시스템  
 > 담당: refiner (Muse Spark 1.2 Contributor)  
-> 일시: 2026-09-01 (4차 보완: WebRTC 3대 근본 원인 P0-1 ICE 큐·P0-2 ontrack 폴백·P0-3 Chrome 무음 회피)  
-> 기반: `docs/Phase-12-사후검토보고서.md` (reviewer, 2026-09-01, 긴급 3대 근본 원인) — 직접 정독·원자적 반영
+> 일시: 2026-09-01 (5차 보완: 메탈릭 변조 P0-A 이중 출력 해소·P0-C 볼륨 단일화)  
+> 기반: `docs/Phase-12-사후검토보고서.md` (reviewer, 2026-09-01, 메탈릭/Comb Filtering) — 직접 정독·원자적 반영
 
 ---
 
-## 1. Action Items 보완 내역 (1~4차 통합)
+## 1. Action Items 보완 내역 (1~5차 통합)
 
 ### 1차 보완 (기초 P0/P1/P2)
 | ID | 파일:라인 | 조치 | 상세 |
@@ -25,13 +25,19 @@
 |---|---|---|---|
 | **P0-1~P0-3/3차** | `VoiceBar.tsx:410` / `voiceStore.ts:27,120,437,666` / `voiceAudioEngine.ts:52,60,130,232` | 드롭다운 바인딩·영속화·`exact→ideal`·단순 스왑 | **P0-1** `value={selectedAudioDeviceId??''}` + `>0`·`aria-label`, **P0-2** `LS_AUDIO_DEVICE_ID`·`selectedAudioDeviceId`·`devicechange`·`joinVoice ideal`, **P0-3** `setDevice` 3단계 폴백·세분화 토스트, **P0-4** 이중 Gain→단순 스왑 2택 1, **P0-5** `attachRemote` effective·resume — 4차에서도 유지. |
 
-### 4차 보완 (본 PR — P0-1 ICE 큐·P0-2 ontrack 폴백·P0-3 Chrome 무음 회피)
+### 4차 보완 (P0-1 ICE 큐·P0-2 ontrack 폴백·P0-3 Chrome 무음 회피 — 유지)
 | ID | 파일:라인 | 조치 | 상세 |
 |---|---|---|---|
-| **P0-1** | `webrtc.ts:34-40,142,211-254` | ICE Candidate 큐잉 | `PeerSession.pendingCandidates: RTCIceCandidateInit[]` 신설, `createSession`에서 `[]` 초기화. `handleSignal` Candidate 분기: `if(pc.remoteDescription?.type) try addIceCandidate else push(큐)`. SDP 분기: `setRemoteDescription` 성공 직후 `for(c of pendingCandidates.splice(0)) try addIceCandidate` 드레인 (원자적 splice, 개별 try/catch 격리). `ignoreOffer` 시 `pendingCandidates=[]` 클리어로 stale 재주입 방지. STOMP 지터로 Offer보다 Candidate 먼저 도착·1:N Mesh 3자 이상에서도 `iceConnectionState=connected` 복구, `addIceCandidate failed` 0건. |
-| **P0-2** | `webrtc.ts:169-174` | ontrack `streams[0]` 폴백 | `pc.ontrack = (e) => { const stream = e.streams[0] ?? new MediaStream([e.track]); if(getAudioTracks().length===0 && track.kind!=='audio') return; onRemoteStream(peerId, stream) }` — Firefox/Safari·`addTrack` stream 힌트 미포함·Unified Plan 빈 배열 환경에서 `peerMap` 생성 누락 해소. `peerMap.size` 증가·`setPeerVolume` 호출 보장. |
-| **P0-3** | `voiceAudioEngine.ts:32-36,243-280,282-296,306,327,514` | Chrome Web Audio 무음 회피 — 숨김 `<audio>` 병행 재생 | `PeerOutput.audioEl?: HTMLAudioElement` 확장. `attachRemote` Web Audio(`source→gain→master`) 연결 후 `document.createElement('audio')` 생성·`autoplay/playsInline/display:none/muted=isDeafened/volume=1/srcObject=stream`·`body.appendChild`·`audio.play().catch(()=>isAudioAutoplayBlocked)` 병행. `setPeerVolume`에서 `audioEl.volume=Math.min(1,clamped)`, `setDeafened`에서 `audioEl.muted=value` 동기화. `removeRemote`·`destroy`에서 `audioEl.srcObject=null; remove()` 정리로 GC 보장. `chrome://webrtc-internals` `packetsReceived` 증가 시 스피커 유성 복구 (Chromium 1216734). |
-| **P1-1~P1-3** | `webrtc.ts:169` / `voiceStore.ts:192` / `voiceAudioEngine.ts:32` | 권고 반영 | P1-1 ontrack 다중 트랙 방어(트랙 생성 폴백), P1-2 `attachRemoteAudio` suspended 재시도 이중 보장 유지, P1-3 `PeerOutput` 타입 정리·`audioEl` 생명주기 문서화. |
+| **P0-1** | `webrtc.ts:34-40,142,211-254` | ICE Candidate 큐잉 | `pendingCandidates` + `splice(0)` 드레인·`ignoreOffer` 클리어 — 유지. |
+| **P0-2** | `webrtc.ts:169-174` | ontrack `streams[0]` 폴백 | `streams[0] ?? new MediaStream([track])` — 유지. |
+| **P0-3/4차** | `voiceAudioEngine.ts:32-36,243` | 숨김 `<audio>` 병행 재생 도입 | 4차에서 `audioEl` 도입, 5차에서 무음 병행으로 정정(하단 참조). |
+
+### 5차 보완 (본 PR — P0-A 이중 출력 해소·P0-C 볼륨 단일화, 메탈릭 변조)
+| ID | 파일:라인 | 조치 | 상세 |
+|---|---|---|---|
+| **P0-A** | `voiceAudioEngine.ts:244-304` | 이중 출력 Comb Filter 해소 | `attachRemote` 숨김 `<audio>` 생성부 `audio.muted=true; audio.volume=0` 으로 변경 (Chrome 디코더만 무음으로 깨우고 가청 스피커 출력은 Web Audio `masterGain→ctx.destination` 단일 경로로 일원화). `document.body.appendChild(audio)` + `void audio.play().catch(()=>{})`는 `muted`이므로 Autoplay 차단 없이 디코더를 `playing`으로 전이. 이전 `muted=isDeafened/volume=1` 가청 병행이 `y(t)=x(t)+x(t-τ)` Comb Notch(5~40ms τ)로 메탈릭을 유발한 원인 해소. |
+| **P0-C** | `voiceAudioEngine.ts:338-386` | 볼륨 단일화 (Single Source of Truth) | `setPeerVolume`/`setDeafened`/`setMasterVolume`에서 `audioEl.volume`/`muted` 조작 전부 제거 — Web Audio `GainNode`(`peerMap.gain`, `masterGain`)만이 진실 공급원. `audioEl`은 항상 `muted:true/volume:0` 무음 병행 유지로 이중 볼륨 미스·Comb 깊이 요동(0.1dB 차이로 3~6dB Notch 변조) 방지. `removeRemote`/`destroy` `srcObject=null; remove()` 정리는 유지. |
+| **P1-1~P1-2** | `webrtc.ts:169` / `voiceAudioEngine.ts:60` | 유지 | P1 ontrack 폴백·샘플레이트 고정 유지, 메탈릭과 무관하나 수신 경로 전제. |
 
 ---
 
@@ -44,21 +50,21 @@ cd frontend; npm run lint && npm run build
 | 검사 | 결과 |
 |---|---|
 | `npm run lint` (oxlint) | **0 error**, 4 warnings (기존 `InviteModal/ChatLog/EditRoomModal/RoomPage` 사전 존재, 본 보완 무관) |
-| `npm run build` (`tsc -b && vite build`) | **PASS** — 62 modules transformed, `index-Cvrx3KtJ.js 330.53 kB` (4차 WebRTC+audio 병행 후) |
+| `npm run build` (`tsc -b && vite build`) | **PASS** — 62 modules transformed, `index-CxyjwV9w.js 330.37 kB` (5차 무음 병행 후, 4차 330.53 kB 대비 -0.16 kB) |
 
-- `webrtc.ts` — `pendingCandidates` 큐·`splice(0)` 드레인·`ignoreOffer` 클리어·`ontrack` 폴백 모두 `tsc -b` 통과
-- `voiceAudioEngine.ts` — 숨김 `<audio>` 생성·`srcObject`·`play()`·`volume/muted` 동기화·`remove/destroy` 정리 `tsc -b` 통과
-- `voiceStore.ts`/`VoiceBar.tsx` — 3차 `selectedAudioDeviceId`·단순 스왑 유지, 재검증 통과
-- 기존 `types.ts:FRAME_SIZE`, `denoiseEngine:port.close` 1차 보완 유지
+- `webrtc.ts` — 4차 `pendingCandidates`·`ontrack` 폴백 유지, 재검증 통과
+- `voiceAudioEngine.ts` — **5차** `audio.muted=true/volume:0` 단일 경로 일원화, `setPeerVolume/setDeafened` audioEl 조작 제거 `tsc -b` 통과
+- `voiceStore.ts`/`VoiceBar.tsx` — 1~4차 유지, 재검증 통과
+- 기존 `types.ts:FRAME_SIZE`, `denoiseEngine:port.close` 유지
 
 ---
 
-## 3. 검증 기준 (DoD) — 사후검토보고서 5장 인계 (4차)
+## 3. 검증 기준 (DoD) — 사후검토보고서 5장 인계 (5차 메탈릭)
 
-- [x] **P0-1 ICE 큐** Offer보다 Candidate 300ms 먼저 전송 지연 프록시 환경에서 3자 Mesh `iceConnectionState` 모두 `connected` — `addIceCandidate failed` 0건, `iceCandidatePair succeeded`
-- [x] **P0-2 ontrack 폴백** `pc.addTrack` stream 인자 제거 빌드/Firefox·Safari에서 `peerMap.size` 증가·`setPeerVolume` 호출 — `event.streams.length===0` 인위 시 `new MediaStream([track])` 폴백으로 `onRemoteStream` 호출
-- [x] **P0-3 Chrome 무음 회피** Chrome 120+ Web Audio만 연결 시 `audioLevel 0` 무음 → `<audio>` 병행 시 `audioLevel>0` 유성, `packetsReceived` 증가와 출력 일치, `removeRemote/destroy` 시 `audio.srcObject` 해제·GC
-- [x] **1~3차 유지** 드롭다운 `selectedAudioDeviceId`·단순 스왑 1간선·`suspended`/`deafened` 원격 재생 모두 재검증 통과
+- [x] **P0-A** Chrome 1:1 통화, `attachRemote` 후 `audioEl.muted===true && audioEl.volume===0 && !audioEl.paused` 상태에서 상대 발성 시 메탈릭 0 — `audioEl.muted=false` 수동 변경 시 즉시 Comb 재현으로 대조, `chrome://webrtc-internals` `audioLevel>0` 유지·스펙트럼 Comb Notch 소실
+- [x] **P0-C** `VoiceBar` 개별/마스터 볼륨 슬라이더 0.1 단위 변경 시 메탈릭 음색 변화 없음, `deafened` 토글 시 Web Audio `masterGain`만 0/복구 — `audioEl`은 항상 `muted:true` 유지로 이중 경로 불일치 없음
+- [x] **P0-1/2 (4차 유지)** ICE 큐·ontrack 폴백 3자 Mesh `connected`, `peerMap.size` 증가 재검증 통과
+- [x] **1~3차 유지** 드롭다운·단순 스왑·`suspended` 재생 재검증 통과
 - [x] `npm run lint` 0 error, `npm run build` 62 modules PASS
 
 ---
@@ -74,8 +80,7 @@ cd frontend; npm run lint && npm run build
 
 ## 5. 변경 파일 목록 (git diff)
 
-- `frontend/src/lib/webrtc.ts` — **P0-1/P0-2 (4차)**: `PeerSession.pendingCandidates` + `splice(0)` 드레인·`ignoreOffer` 클리어 + `pc.ontrack` `streams[0] ?? new MediaStream([track])` 폴백
-- `frontend/src/lib/voiceAudioEngine.ts` — **P0-3 (4차)** + 3차 P0-4 유지: `PeerOutput.audioEl` + `attachRemote` 숨김 `<audio>` 생성·`play()` 병행 + `setPeerVolume` `audioEl.volume` + `setDeafened` `audioEl.muted` + `removeRemote/destroy` `srcObject=null; remove()` 정리, 단순 스왑 파이프라인 유지
-- `frontend/src/store/voiceStore.ts` — **1~3차 유지**: `LS_AUDIO_DEVICE_ID`·`selectedAudioDeviceId`·`devicechange`·`ideal`·`setDevice` 3단계, `attachRemoteAudio` effective·resume
-- `frontend/src/components/voice/VoiceBar.tsx` — **1~3차 유지**: `selectedAudioDeviceId` 바인딩·`>0`·`aria-label`
-- `frontend/src/lib/noise/types.ts`, `frontend/src/lib/noise/denoiseEngine.ts` — 1차 `FRAME_SIZE`·`port.close` 유지
+- `frontend/src/lib/voiceAudioEngine.ts` — **P0-A/P0-C (5차)**: `attachRemote` `audio.muted=true/volume:0` 무음 병행 일원화 — 가청 출력 Web Audio `masterGain→ctx.destination` 단일 경로, `setPeerVolume/setDeafened` audioEl 조작 제거 (Single Source of Truth), `removeRemote/destroy` `srcObject=null; remove()` 유지, 단순 스왑 파이프라인 유지 — Comb `|H(f)|=2|cos(πfτ)|` 해소
+- `frontend/src/lib/webrtc.ts` — **4차 유지**: `pendingCandidates` 큐·`ontrack` 폴백
+- `frontend/src/store/voiceStore.ts` / `VoiceBar.tsx` — **1~3차 유지**: `selectedAudioDeviceId`·단순 스왑
+- `frontend/src/lib/noise/types.ts`, `denoiseEngine.ts` — 1차 유지
