@@ -32,6 +32,6 @@ export function isDenoiserSupported(): boolean {
   const AudioCtor =
     (window as unknown as { AudioContext: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext ??
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  const hasWorkletLoader = !!AudioCtor?.prototype?.audioWorklet
+  const hasWorkletLoader = !!AudioCtor && 'audioWorklet' in AudioCtor.prototype
   return hasWorklet && hasWasm && hasWorkletLoader
 }
