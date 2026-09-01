@@ -4,6 +4,7 @@ import { ensureStompConnected } from '../lib/stomp'
 import { WebRtcManager } from '../lib/webrtc'
 import { AudioDetector } from '../lib/audioDetector'
 import { VoiceAudioEngineImpl } from '../lib/voiceAudioEngine'
+import { isDenoiserSupported, isNoiseSuppressionModel, type NoiseSuppressionModel } from '../lib/noise/types'
 
 // ── 전역 리소스 (React 상태 아님)
 let manager: WebRtcManager | null = null
@@ -21,6 +22,9 @@ const LS_MASTER_VOLUME = 'talklite_master_volume'
 const LS_USER_VOLUMES = 'talklite_user_volumes'
 const LS_INPUT_MODE = 'talklite_input_mode'
 const LS_PTT_KEY = 'talklite_ptt_key'
+// Phase 12 — AI 잡음 제거 영구 기억 (화이트리스트 검증)
+const LS_AI_NOISE_ENABLED = 'talklite_ai_noise_enabled'
+const LS_AI_NOISE_MODEL = 'talklite_ai_noise_model'
 
 let inputGainTimer: ReturnType<typeof setTimeout> | null = null
 let masterTimer: ReturnType<typeof setTimeout> | null = null
@@ -110,6 +114,39 @@ function loadPttKey(): string {
     /* ignore */
   }
   return 'KeyT'
+}
+
+// Phase 12 — AI 노이즈 제거 영속화 (화이트리스트 검증 탑재)
+function loadAiNoiseEnabled(): boolean {
+  try {
+    return localStorage.getItem(LS_AI_NOISE_ENABLED) === 'true'
+  } catch {
+    /* ignore */
+  }
+  return false
+}
+function loadAiNoiseModel(): NoiseSuppressionModel {
+  try {
+    const raw = localStorage.getItem(LS_AI_NOISE_MODEL)
+    if (isNoiseSuppressionModel(raw)) return raw
+  } catch {
+    /* ignore */
+  }
+  return 'rnnoise'
+}
+function saveAiNoiseEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(LS_AI_NOISE_ENABLED, String(enabled))
+  } catch {
+    /* ignore */
+  }
+}
+function saveAiNoiseModel(model: NoiseSuppressionModel): void {
+  try {
+    localStorage.setItem(LS_AI_NOISE_MODEL, model)
+  } catch {
+    /* ignore */
+  }
 }
 
 function debouncedSaveInputGain(value: number): void {
@@ -283,6 +320,10 @@ function cleanupVoiceResources(): void {
   engine?.destroy()
   engine = null
   wasInVoice = false
+  // Phase 12 — 노이즈 로딩 상태 리셋 (엔진 파괴 시 대기 중 상태 방지)
+  if (useVoiceStore.getState().isNoiseLoading) {
+    useVoiceStore.setState({ isNoiseLoading: false })
+  }
   // PTT 릴리즈 타이머 정리 (Stuck 해제)
   if (pttReleaseTimer) {
     clearTimeout(pttReleaseTimer)
@@ -414,6 +455,12 @@ interface VoiceState {
   isTestingMic: boolean
   micVolumeLevel: number
   micTestUrl: string | null
+  // Phase 12 — AI 잡음 제거
+  isNoiseSuppressionEnabled: boolean
+  noiseSuppressionModel: NoiseSuppressionModel
+  isNoiseLoading: boolean
+  noiseError: string | null
+  isDenoiserSupported: boolean
 
   connectRoomVoice: (roomId: string) => Promise<void>
   disconnectRoomVoice: () => void
@@ -435,6 +482,9 @@ interface VoiceState {
   setPttKey: (code: string) => void
   startMicTest: () => Promise<void>
   stopMicTest: () => void
+  // Phase 12
+  setNoiseSuppression: (enabled: boolean, model?: NoiseSuppressionModel) => Promise<void>
+  setNoiseSuppressionModel: (model: NoiseSuppressionModel) => Promise<void>
 }
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
@@ -456,6 +506,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   isTestingMic: false,
   micVolumeLevel: 0,
   micTestUrl: null,
+  isNoiseSuppressionEnabled: loadAiNoiseEnabled(),
+  noiseSuppressionModel: loadAiNoiseModel(),
+  isNoiseLoading: false,
+  noiseError: null,
+  isDenoiserSupported: isDenoiserSupported(),
 
   connectRoomVoice: async (roomId: string) => {
     speakerUnsub?.unsubscribe()
@@ -550,6 +605,23 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
       manager.setLocalStream(processed)
       startDetector(roomId)
+      // Phase 12 — 영구 기억된 AI 잡음 제거 설정 복원 적용 (실패 시 Graceful Fallback)
+      const noiseState = get()
+      if (noiseState.isDenoiserSupported && noiseState.isNoiseSuppressionEnabled) {
+        set({ isNoiseLoading: true })
+        try {
+          const ok = await eng.setNoiseSuppression(true, noiseState.noiseSuppressionModel)
+          set({
+            isNoiseLoading: false,
+            isNoiseSuppressionEnabled: ok,
+            noiseError: ok ? null : '잡음 제거 엔진 로딩에 실패하여 일반 마이크 모드로 전환되었습니다.',
+          })
+          saveAiNoiseEnabled(ok)
+        } catch {
+          set({ isNoiseLoading: false, isNoiseSuppressionEnabled: false, noiseError: null })
+          saveAiNoiseEnabled(false)
+        }
+      }
       stompClient.publish({ destination: `/app/room/${roomId}/voice/start`, body: '{}' })
       if (eng.getContextState() === 'suspended') {
         set({ isInVoice: true, isMuted: false, isDeafened: false, error: null, isAudioAutoplayBlocked: true })
@@ -786,6 +858,55 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     micTestAborted = true
     cleanupMicTestInternal()
     set({ isTestingMic: false, micTestUrl: null })
+  },
+
+  // ── Phase 12: AI 잡음 제거 (온디맨드 로딩 + Graceful Fallback) ──
+  setNoiseSuppression: async (enabled: boolean, model?: NoiseSuppressionModel) => {
+    const state = get()
+    if (!state.isDenoiserSupported) {
+      set({ noiseError: '이 브라우저는 AI 잡음 제거(AudioWorklet/WASM)를 지원하지 않습니다.' })
+      return
+    }
+    const targetModel = model ?? state.noiseSuppressionModel
+    if (!isNoiseSuppressionModel(targetModel)) return
+    if (state.isNoiseLoading) return
+
+    // 미통화 중: 상태/영속화만 반영 (통화 참여 시 파이프라인 적용)
+    if (!engine || !state.isInVoice) {
+      set({
+        isNoiseSuppressionEnabled: enabled,
+        noiseSuppressionModel: targetModel,
+        noiseError: null,
+      })
+      saveAiNoiseEnabled(enabled)
+      saveAiNoiseModel(targetModel)
+      return
+    }
+
+    set({ isNoiseLoading: true, noiseError: null })
+    const ok = await engine.setNoiseSuppression(enabled, targetModel)
+    set({
+      isNoiseLoading: false,
+      isNoiseSuppressionEnabled: ok ? enabled : false,
+      noiseError: ok ? null : '잡음 제거 엔진 로딩에 실패하여 일반 마이크 모드로 전환되었습니다.',
+    })
+    // Fallback 시에도 사용자 선택(model)은 기억, enabled는 실패면 false로 영속화
+    saveAiNoiseEnabled(ok ? enabled : false)
+    saveAiNoiseModel(targetModel)
+  },
+
+  setNoiseSuppressionModel: async (model: NoiseSuppressionModel) => {
+    if (!isNoiseSuppressionModel(model)) return
+    const state = get()
+    if (!state.isDenoiserSupported) {
+      set({ noiseError: '이 브라우저는 AI 잡음 제거(AudioWorklet/WASM)를 지원하지 않습니다.' })
+      return
+    }
+    set({ noiseSuppressionModel: model })
+    saveAiNoiseModel(model)
+    if (state.isInVoice && engine && state.isNoiseSuppressionEnabled) {
+      await get().setNoiseSuppression(true, model)
+    }
   },
 }))
 

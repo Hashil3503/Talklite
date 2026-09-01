@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useVoiceStore } from '../../store/voiceStore'
 import { getUid } from '../../store/voiceStore'
+import { NOISE_MODEL_META, type NoiseSuppressionModel } from '../../lib/noise/types'
 
 const VuMeter: React.FC = () => {
   const meterRef = useRef<HTMLDivElement>(null)
@@ -58,6 +59,11 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const pttKey = useVoiceStore((state) => state.pttKey)
   const isPttActive = useVoiceStore((state) => state.isPttActive)
   const isTestingMic = useVoiceStore((state) => state.isTestingMic)
+  const isNoiseSuppressionEnabled = useVoiceStore((state) => state.isNoiseSuppressionEnabled)
+  const noiseSuppressionModel = useVoiceStore((state) => state.noiseSuppressionModel)
+  const isNoiseLoading = useVoiceStore((state) => state.isNoiseLoading)
+  const noiseError = useVoiceStore((state) => state.noiseError)
+  const isDenoiserSupported = useVoiceStore((state) => state.isDenoiserSupported)
   const joinVoice = useVoiceStore((state) => state.joinVoice)
   const leaveVoice = useVoiceStore((state) => state.leaveVoice)
   const toggleMute = useVoiceStore((state) => state.toggleMute)
@@ -70,6 +76,8 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const setPttKey = useVoiceStore((state) => state.setPttKey)
   const startMicTest = useVoiceStore((state) => state.startMicTest)
   const stopMicTest = useVoiceStore((state) => state.stopMicTest)
+  const setNoiseSuppression = useVoiceStore((state) => state.setNoiseSuppression)
+  const setNoiseSuppressionModel = useVoiceStore((state) => state.setNoiseSuppressionModel)
 
   const [showInput, setShowInput] = useState(false)
   const [showMaster, setShowMaster] = useState(false)
@@ -281,6 +289,73 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
                     {inputMode === 'push_to_talk' && (
                       <p className="mt-1 text-[10px] leading-tight text-zinc-500">PTT 모드에서는 {formatPttKey(pttKey)}를 누르고 있을 때만 마이크가 열립니다. Alt-Tab 시 자동 차단됩니다.</p>
                     )}
+                  </div>
+
+                  {/* Phase 12 — AI 딥러닝 잡음 제거 */}
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-300">AI 잡음 제거</span>
+                      {!isDenoiserSupported && (
+                        <span
+                          title="이 브라우저는 AudioWorklet/WASM을 지원하지 않습니다"
+                          className="text-[10px] text-zinc-500"
+                        >
+                          미지원 브라우저
+                        </span>
+                      )}
+                      {isNoiseLoading && (
+                        <span aria-busy="true" className="text-[10px] text-amber-300">
+                          ⏳ 로딩 중...
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span id="talklite-noise-label" className="text-xs text-zinc-400">AI 딥러닝 잡음 제거 사용</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isNoiseSuppressionEnabled}
+                        aria-labelledby="talklite-noise-label"
+                        disabled={!isDenoiserSupported || isNoiseLoading}
+                        onClick={() => void setNoiseSuppression(!isNoiseSuppressionEnabled)}
+                        className={`relative h-5 w-10 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+                          isNoiseSuppressionEnabled ? 'bg-emerald-600' : 'bg-zinc-700'
+                        } ${!isDenoiserSupported || isNoiseLoading ? 'cursor-not-allowed opacity-50' : ''}`}
+                      >
+                        <span
+                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
+                            isNoiseSuppressionEnabled ? 'left-[1.375rem]' : 'left-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {isDenoiserSupported && isNoiseSuppressionEnabled && (
+                      <div className="mt-2 space-y-1" role="radiogroup" aria-label="잡음 제거 엔진 선택">
+                        {(Object.keys(NOISE_MODEL_META) as NoiseSuppressionModel[]).map((m) => (
+                          <label
+                            key={m}
+                            className={`flex cursor-pointer items-start gap-2 rounded-md p-1.5 transition-colors ${
+                              noiseSuppressionModel === m ? 'bg-emerald-950/60 border border-emerald-800' : 'hover:bg-zinc-800/60 border border-transparent'
+                            } ${isNoiseLoading ? 'pointer-events-none opacity-60' : ''}`}
+                          >
+                            <input
+                              type="radio"
+                              name="talklite-noise-model"
+                              value={m}
+                              checked={noiseSuppressionModel === m}
+                              disabled={isNoiseLoading}
+                              onChange={() => void setNoiseSuppressionModel(m)}
+                              className="mt-0.5 accent-emerald-500"
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-xs font-semibold text-zinc-200">{NOISE_MODEL_META[m].label}</span>
+                              <span className="block text-[10px] leading-tight text-zinc-500">{NOISE_MODEL_META[m].description}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {noiseError && <p className="mt-1 text-[10px] leading-tight text-amber-400">{noiseError}</p>}
                   </div>
                 </div>
               )}

@@ -1,8 +1,14 @@
 /**
  * Phase 8 VoiceAudioEngine — Web Audio 기반 정밀 볼륨 제어 엔진.
- * 송신: rawMicStream -> Source -> inputGain(0~2.0) -> DynamicsCompressor(-6dB 12:1) -> Destination
+ * 송신: rawMicStream -> Source -> [DenoiseWorklet(Phase 12, 옵션)] -> inputGain(0~2.0) -> DynamicsCompressor(-6dB 12:1) -> Destination
  * 수신: peer Stream -> Source -> peerGain(0~2.0) -> masterGain(0~1.0) -> AudioContext.destination
+ *
+ * Phase 12: setNoiseSuppression(enabled, model) — Destination 불변, denoiseSeq 시퀀스 가드,
+ * 5ms 크로스페이드, WASM 로딩 실패 시 Graceful Fallback(바이패스).
  */
+
+import { createDenoiseNode, disposeHandle, rampGain, type DenoiseEngineHandle } from './noise/denoiseEngine'
+import type { NoiseSuppressionModel } from './noise/types'
 
 export interface VoiceAudioEngine {
   initializeInput(rawStream: MediaStream): MediaStream
@@ -18,6 +24,7 @@ export interface VoiceAudioEngine {
   getProcessedStream(): MediaStream | null
   getContextState(): AudioContextState | null
   getAnalyser(): AnalyserNode | null
+  setNoiseSuppression(enabled: boolean, model: NoiseSuppressionModel): Promise<boolean>
 }
 
 interface PeerOutput {
@@ -41,6 +48,14 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   private storedMasterVolume = 1
   private currentMasterVolume = 1
   private currentInputGain = 1
+
+  // Phase 12 — denoise 파이프라인
+  private denoiseHandle: DenoiseEngineHandle | null = null
+  private denoiseInputGain: GainNode | null = null
+  private denoiseBypassGain: GainNode | null = null
+  private denoiseSeq = 0
+  private noiseSuppressionEnabled = false
+  private noiseSuppressionModel: NoiseSuppressionModel = 'rnnoise'
 
   private ensureContext(): AudioContext {
     if (this.ctx) return this.ctx
@@ -153,6 +168,29 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     return this.destination ? this.destination.stream : rawStream
   }
 
+  /** Phase 12 — 잡음 제거 활성 상태에 따라 새 Source를 올바른 게인에 재연결 */
+  private rewireInputSource(source: MediaStreamAudioSourceNode): void {
+    if (this.noiseSuppressionEnabled && this.denoiseHandle && this.denoiseInputGain && this.denoiseBypassGain && this.inputGain) {
+      // Denoise 활성: source → denoiseInputGain(→worklet→inputGain) + source → bypassGain(→inputGain) 병렬
+      try {
+        source.connect(this.denoiseInputGain)
+      } catch {
+        // ignore
+      }
+      try {
+        source.connect(this.denoiseBypassGain)
+      } catch {
+        // ignore
+      }
+    } else if (this.inputGain) {
+      try {
+        source.connect(this.inputGain)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   replaceInput(newStream: MediaStream): MediaStream {
     if (!this.ctx || !this.inputGain || !this.destination) {
       // No context yet — fallback to initialize
@@ -170,7 +208,7 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     }
     const source = this.ctx.createMediaStreamSource(newStream)
     this.inputSource = source
-    source.connect(this.inputGain)
+    this.rewireInputSource(source)
     return this.destination.stream
   }
 
@@ -280,11 +318,143 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     return this.ctx ? this.ctx.state : null
   }
 
+  setNoiseSuppression(enabled: boolean, model: NoiseSuppressionModel): Promise<boolean> {
+    return this.applyNoiseSuppression(enabled, model)
+  }
+
+  /**
+   * Phase 12 — 무단절 denoise 파이프라인 전환.
+   * - Destination 노드 불변 (WebRTC 송신 트랙 유지)
+   * - denoiseSeq 시퀀스 가드로 동시 전환 경합 방지 (마지막 요청만 유효)
+   * - 5ms 크로스페이드 (팝 노이즈 방어)
+   * - WASM/Worklet 로딩 실패 시 Graceful Fallback: 바이패스 유지, false 반환
+   */
+  private async applyNoiseSuppression(enabled: boolean, model: NoiseSuppressionModel): Promise<boolean> {
+    if (!this.ctx || !this.inputSource || !this.inputGain) return false
+    const ctx = this.ctx
+    const seq = ++this.denoiseSeq
+
+    this.noiseSuppressionModel = model
+
+    // OFF (바이패스): 기존 노드는 유지하되 크로스페이드로 게인 전환 후 노드 해제
+    if (!enabled) {
+      this.noiseSuppressionEnabled = false
+      this.crosfadeToBypass()
+      // 시퀀스 가드: 최신 요청이 아니면 노드 정리를 미룬다 (dispose는 최종 책임)
+      if (seq === this.denoiseSeq) {
+        this.teardownDenoiseNodes()
+      }
+      return true
+    }
+
+    // ON: 엔진 노드 준비 (없거나 모델이 바뀐 경우에만 생성 → 핫스왑)
+    try {
+      const needsNewNode = !this.denoiseHandle || this.denoiseHandle.model !== model
+      if (needsNewNode) {
+        const oldHandle = this.denoiseHandle
+        const node = await createDenoiseNode(ctx, model)
+        // 시퀀스 가드: 로딩 중 다른 요청이 들어왔으면 새 노드 폐기하고 포기
+        if (seq !== this.denoiseSeq) {
+          disposeHandle({ model, node, dispose: () => {} })
+          return false
+        }
+        if (oldHandle) {
+          disposeHandle(oldHandle)
+        }
+        this.denoiseHandle = { model, node, dispose: () => disposeHandle({ model, node, dispose: () => {} }) }
+
+        // 토폴로지: source -> denoiseInput -> worklet -> denoiseOutputGain -> inputGain
+        if (!this.denoiseInputGain) {
+          const dg = ctx.createGain()
+          dg.gain.value = 0
+          this.denoiseInputGain = dg
+        }
+        if (!this.denoiseBypassGain) {
+          const bg = ctx.createGain()
+          bg.gain.value = 1
+          this.denoiseBypassGain = bg
+          // bypass 경로: source -> bypassGain -> inputGain (최초 1회만 연결)
+          this.inputSource.connect(bg)
+          bg.connect(this.inputGain)
+        }
+
+        this.denoiseInputGain.disconnect()
+        this.denoiseInputGain.connect(node)
+        node.connect(this.inputGain)
+        // denoise 경로 주입: source -> denoiseInput (bypassGain 연결은 유지)
+        try {
+          this.inputSource.disconnect(this.denoiseInputGain)
+        } catch {
+          // 미연결 상태 — 무시
+        }
+        this.inputSource.connect(this.denoiseInputGain)
+      }
+
+      this.noiseSuppressionEnabled = true
+      this.crosfadeToDenoise()
+      return true
+    } catch (err) {
+      // Graceful Fallback — WASM 로딩 실패 등: 통화 유지, 바이패스로 복귀
+      console.error('[voice] noise suppression load failed, falling back to bypass:', err)
+      if (seq === this.denoiseSeq) {
+        this.noiseSuppressionEnabled = false
+        this.crosfadeToBypass()
+        this.teardownDenoiseNodes()
+      }
+      return false
+    }
+  }
+
+  /** 5ms 크로스페이드: denoise 경로 ON / bypass OFF */
+  private crosfadeToDenoise(): void {
+    if (!this.ctx || !this.denoiseInputGain || !this.denoiseBypassGain) return
+    rampGain(this.denoiseInputGain, this.ctx, 1)
+    rampGain(this.denoiseBypassGain, this.ctx, 0)
+  }
+
+  /** 5ms 크로스페이드: bypass ON / denoise OFF */
+  private crosfadeToBypass(): void {
+    if (!this.ctx || !this.denoiseInputGain || !this.denoiseBypassGain) return
+    rampGain(this.denoiseBypassGain, this.ctx, 1)
+    rampGain(this.denoiseInputGain, this.ctx, 0)
+  }
+
+  /** denoise 전용 노드 연결 해제 (bypassGain은 유지 — 재활용) */
+  private teardownDenoiseNodes(): void {
+    if (this.denoiseHandle) {
+      try {
+        this.denoiseHandle.node.disconnect()
+      } catch {
+        // ignore
+      }
+      disposeHandle(this.denoiseHandle)
+      this.denoiseHandle = null
+    }
+    if (this.denoiseInputGain) {
+      try {
+        this.denoiseInputGain.disconnect()
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  getNoiseSuppressionState(): { enabled: boolean; model: NoiseSuppressionModel } {
+    return { enabled: this.noiseSuppressionEnabled, model: this.noiseSuppressionModel }
+  }
+
   getAnalyser(): AnalyserNode | null {
     return this.analyser
   }
 
   destroy(): void {
+    // Phase 12 — AudioContext를 닫기 전에 denoise 노드부터 정리 (port/Worklet 누수 방어)
+    this.teardownDenoiseNodes()
+    this.denoiseBypassGain = null
+    this.denoiseInputGain = null
+    this.noiseSuppressionEnabled = false
+    this.denoiseSeq++
+
     // Disconnect & clear peer outputs
     for (const [, entry] of this.peerMap) {
       try {
