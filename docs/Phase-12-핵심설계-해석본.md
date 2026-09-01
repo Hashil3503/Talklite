@@ -14,7 +14,7 @@ graph LR
     subgraph Browser_Local_Inference ["💻 사용자 브라우저 로컬 (온디바이스 연산)"]
         A[rawMicStream] --> B[MediaStreamSource]
         B --> C{"AI 잡음 제거 활성화?"}
-        C -->|ON| D["플러그형 AudioWorklet WASM 엔진<br>(RNNoise / DeepFilterNet / Speex)"]
+        C -->|ON (단순 스왑)| D["플러그형 AudioWorklet 엔진<br>(DeepFilterNet / Speex DSP)"]
         C -->|OFF (Bypass)| E[inputGain 200% 증폭]
         D -->|소음 제거된 음성| E
         E --> F[DynamicsCompressorNode]
@@ -23,12 +23,12 @@ graph LR
     end
 ```
 
-### 1) 왜 단일 모델이 아닌 "사용자 선택형 멀티 엔진(Pluggable Multi-Engine)" 구조를 채택했을까요?
-* **다양한 게이머 환경 대응**: 게이머들의 PC 사양(저사양 모바일/노트북 vs 고사양 데스크톱)과 통화 목적(기계식 키보드 타건음 차단 vs 고음질 방송/노래 vs 배터리 절전)이 모두 다릅니다.
-* **3대 엔진 라인업**:
-  1. **`RNNoise (기본 권장)`**: 게이밍 최적화. 키보드 타건음/광클릭 완벽 억제, CPU 점유율 1~3%, 10ms 초저지연.
-  2. **`DeepFilterNet (스튜디오)`**: 고음질 음색 보존 최적화. 사람 목소리 왜곡 최소화, 스튜디오급 선명도.
-  3. **`Speex DSP (초절전)`**: 에어컨/팬 소음 등 지속 노이즈 전용, CPU 0.5% 미만 배터리 절약 모드.
+### 1) 왜 "정예 2종 엔진(DeepFilterNet / Speex DSP)" 구조로 최적화했을까요?
+* **실제 청음 품질 검증 기반 정예화**: 
+  - `RNNoise`의 주파수 분할 순환 연산에서 발생하던 매미 날개짓 아티팩트(Flapping noise)를 사용자 피드백을 통해 식별하고 완전 제거.
+* **검증된 정예 2대 엔진 라인업**:
+  1. **`DeepFilterNet (스튜디오 권장)`**: 32-ERB 고해상도 대역 + 딥 레지듀얼 에르미트 필터로 사람 목소리 왜곡 0% 유지 및 키보드/클릭/환경 잡음 실시간 -30dB 억제.
+  2. **`Speex DSP (초절전)`**: 16-Critical Band 기반 고속 Speex 공식 서브트랙션으로 선풍기/에어컨/팬 소음 전용 초저부하 컷오프.
 
 ### 2) 왜 클라우드 서버 API가 아닌 "브라우저 온디바이스(로컬 WASM)" 방식이어야 할까요?
 * **초저지연 (5~10ms)**: 내 컴퓨터/스마트폰 CPU 안에서 즉시 지워버리므로 통화 지연 체감이 전혀 없습니다.

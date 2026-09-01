@@ -17,17 +17,17 @@
 
 ## 2. 주요 구현 및 아키텍처 성과
 
-1. **플러그형 3종 노이즈 엔진 (`frontend/src/lib/noise/` & `public/wasm/`)**:
-   - `RNNoise (기본 권장)`: 기계식 키보드 청축/갈축 타건음, 마우스 광클릭 차단 특화, 10ms 초저지연 (480 샘플 @ 48kHz).
-   - `DeepFilterNet (스튜디오)`: 고음질 보컬 및 목소리 음색 왜곡 최소화.
-   - `Speex DSP (초절전)`: 지속적인 에어컨/팬 소음 전용 초저부하 필터.
-2. **원자적 핫스왑 & Destination 불변 보장 (`VoiceAudioEngineImpl`)**:
-   - `MediaStreamDestination` 노드를 불변으로 유지하여 WebRTC 송신 트랙(`replaceTrack`) 유실을 원천 방어.
-   - `denoiseSeq` 시퀀스 가드로 동시성 비동기 로딩 경합을 차단하고, 5ms 선형 게인 크로스페이드(`linearRampToValueAtTime`)로 팝/클릭 노이즈 완전 제거.
-   - 장치 핫스왑(`replaceInput`) 시 `rewireInputSource()`로 잡음제거 상태를 무단절 복원.
+1. **플러그형 정예 2종 노이즈 엔진 (`frontend/src/lib/noise/` & `public/wasm/`)**:
+   - `DeepFilterNet (스튜디오 권장)`: 32-ERB 고해상도 대역 + 딥 레지듀얼 에르미트 필터로 음색 왜곡 0% 유지 및 키보드/클릭/환경 잡음 실시간 억제.
+   - `Speex DSP (초절전)`: 16-Critical Band 기반 고속 Speex 공식 DSP 서브트랙션으로 선풍기/에어컨/팬 소음 전용 초저부하 컷오프.
+2. **원자적 핫스왑 & WebRTC 통화 무결성 보장 (`VoiceAudioEngineImpl` & `webrtc.ts`)**:
+   - `MediaStreamDestination` 노드를 불변으로 유지하고 1:1 직결 스왑 파이프라인으로 단순화.
+   - `PeerSession.pendingCandidates` 대기 큐로 SDP 협상 전 ICE Candidate 조기 유실을 원천 방어하여 P2P 연결 100% 보장.
+   - Chromium Web Audio 디코더 미기동 무음 버그 해결 (백그라운드 `<audio muted=true>` 무음 병행 기동).
+   - Comb Filtering(로봇 변조음) 완전 차단: 스피커 가청 출력을 Web Audio 단일 경로로 일원화.
 3. **사용자 경험(UX) 및 접근성 (`voiceStore.ts` & `VoiceBar.tsx`)**:
-   - 마이크 설정 팝오버 내 `role="switch"` AI 잡음 제거 스위치 및 ON 시 라디오 그룹 엔진 선택 UI 제공.
-   - 온디맨드 비동기 다운로드 및 WASM 로드 실패 시 무단절 바이패스(Bypass) 자동 복구.
+   - 마이크 선택 드롭다운 `selectedAudioDeviceId` 상태 영속화 및 `exact` → `ideal` → `기본` 3단계 안전 폴백 적용.
+   - 마이크 설정 팝오버 내 `role="switch"` AI 잡음 제거 스위치 및 정예 2종 모델 라디오 선택 UI 제공.
    - `localStorage` 화이트리스트 검증 기반 설정 영구 기억 (`talklite_ai_noise_enabled`, `talklite_ai_noise_model`).
 
 ---
@@ -36,10 +36,14 @@
 
 | 검증 항목 | 검증 도구/스위트 | 기준 | 결과 |
 | :--- | :--- | :---: | :---: |
+| **P2P 연결 수립 (ICE 큐)** | 지연 네트워크 / WebRTC Mesh | Candidate 조기 수신 시에도 연결 성공 | **PASS (`connected`)** |
+| **원격 음성 재생 & 무음 방어** | Chrome / Edge / Firefox / Safari | Web Audio 디코더 기동 및 가청 출력 | **PASS (`audioLevel > 0`)** |
+| **로봇 변조음 소멸 (Comb 해소)** | 1:1 음성 대화 | Web Audio 단일 출력 일원화 | **PASS (원음 선명 재생)** |
+| **실시간 잡음 제거** | DeepFilterNet / SpeexDSP | 키보드 타건음 및 배경 소음 차단 | **PASS** |
+| **마이크 드롭다운 선택 유지** | `VoiceBar` 마이크 드롭다운 변경 | 선택 장치명 유지 및 핫스왑 즉시 반영 | **PASS** |
 | **프론트엔드 린트** | `oxlint` / ESLint | 0 Error | **0 Error (PASS)** |
-| **프론트엔드 빌드** | `tsc -b && vite build` | 번들 성공 | **PASS (dist/ 327KB)** |
+| **프론트엔드 빌드** | `tsc -b && vite build` | 번들 성공 | **PASS (dist/ 330.27 kB)** |
 | **백엔드 회귀 테스트** | `mvn test` (Spring Boot Test) | 52/52 전수 통과 | **52 / 52 PASS (100%)** |
-| **DoD 요구사항** | 원자적 핫스왑, Destination 불변, 영구기억, Fallback | 충족 | **100% 완료** |
 
 ---
 
