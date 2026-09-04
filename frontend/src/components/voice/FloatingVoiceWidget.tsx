@@ -42,7 +42,7 @@ export const FloatingVoiceWidget: React.FC<FloatingVoiceWidgetProps> = ({ onRetu
       cardTop: rect.top,
     }
     hasDraggedRef.current = false
-    card.setPointerCapture(e.pointerId)
+    // 포인터 캡처는 드래그 시작(임계값 초과) 시점에만 호출 — 클릭(버튼 onClick)은 캡처 없이 정상 동작해야 하므로
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -52,6 +52,14 @@ export const FloatingVoiceWidget: React.FC<FloatingVoiceWidgetProps> = ({ onRetu
     const dy = e.clientY - start.pointerY
     // 5px 임계값 초과 시에만 드래그 전환 (이하이면 기존 클릭 동작 유지)
     if (!hasDraggedRef.current && Math.hypot(dx, dy) <= DRAG_THRESHOLD) return
+    // 드래그 시작 순간 캡처 — 카드 밖으로 나가도 드래그 유지 (이미 캡처 중이면 무시)
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } catch {
+        // capture 실패 무시
+      }
+    }
     hasDraggedRef.current = true
     setDragging(true)
     const nextX = start.cardLeft + dx
@@ -105,11 +113,14 @@ export const FloatingVoiceWidget: React.FC<FloatingVoiceWidgetProps> = ({ onRetu
         }),
   }
 
+  // 드래그 시작(pos 설정) 후에는 bottom-28 right-6를 제거해 top/left만으로 고정 위치 결정 (top+bottom 동시 지정 시 세로 스트레치 방지)
+  const cardClassName = `fixed z-40 w-64 rounded-2xl border border-[rgba(255,255,255,0.12)] ${
+    dragging ? 'bg-[#1E1E2A]/95' : 'bg-[#171720]/95'
+  } p-3 shadow-2xl shadow-black/60 backdrop-blur-md select-none${pos === null ? ' bottom-28 right-6' : ''}`
+
   return (
     <div
-      className={`fixed bottom-28 right-6 z-40 w-64 rounded-2xl border border-[rgba(255,255,255,0.12)] ${
-        dragging ? 'bg-[#1E1E2A]/95' : 'bg-[#171720]/95'
-      } p-3 shadow-2xl shadow-black/60 backdrop-blur-md select-none`}
+      className={cardClassName}
       style={cardStyle}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
