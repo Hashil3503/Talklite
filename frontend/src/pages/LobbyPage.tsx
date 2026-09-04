@@ -33,7 +33,7 @@ export function LobbyPage({
   showInviteModal,
   setShowInviteModal,
 }: LobbyPageProps) {
-  const { rooms, loading, error, sort, order, setSort, setOrder, search } = useLobbyStore()
+  const { rooms, loading, sort, order, setSort, setOrder, search } = useLobbyStore()
   const showToast = useToastStore((state) => state.showToast)
 
   // 내부/외부(Header) 공용 모달 상태 — props 미지원 시 로컬 폴백
@@ -173,7 +173,6 @@ export function LobbyPage({
           </div>
 
           {loading && <p className="text-center text-muted py-8">검색 중...</p>}
-          {error && <p className="text-center" style={{ color: 'var(--brand-primary)' }}>{error}</p>}
 
           {!loading && (
             <div className="room-grid" id="lobby-room-grid">
