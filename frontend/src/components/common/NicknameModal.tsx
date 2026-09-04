@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useUserStore } from '../../store/userStore'
 import { useToastStore } from '../../store/toastStore'
 
@@ -44,9 +45,19 @@ export const NicknameModal: React.FC<NicknameModalProps> = ({ isOpen, onClose })
     onClose()
   }
 
-  return (
-    <div className="modal-overlay active" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+  // createPortal(document.body) — 헤더 backdrop-filter/sticky의 컨테이닝 블록에 갇히지 않아
+  // 뷰포트 기준 fixed 배치가 보장되어 상단 잘림 현상을 원천 차단한다.
+  return createPortal(
+    <div
+      className="modal-overlay active"
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onClose}
+    >
+      <div
+        className="modal-content"
+        style={{ margin: 'auto', maxWidth: 420 }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h3 className="modal-title">✏️ 닉네임 설정</h3>
           <button className="modal-close" onClick={onClose} aria-label="닫기">
@@ -80,6 +91,7 @@ export const NicknameModal: React.FC<NicknameModalProps> = ({ isOpen, onClose })
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
