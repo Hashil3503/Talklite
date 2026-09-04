@@ -1,5 +1,7 @@
-import React from 'react'
+import React, { useState } from 'react'
 import type { ActiveView } from '../App'
+import { useUserStore } from '../store/userStore'
+import { NicknameModal } from './common/NicknameModal'
 
 interface HeaderProps {
   activeView: ActiveView
@@ -12,8 +14,10 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ activeView, isInRoom, roomTitle, onSwitchView, onExit, onCreateRoom, onOpenInvite }) => {
-  const uid = localStorage.getItem('talklite_uid') || 'anonymous'
-  const shortUid = `${uid.slice(0, 4)}${uid.length > 4 ? '…' : ''}`
+  const displayName = useUserStore((state) => state.displayName)
+  const avatarInitial = useUserStore((state) => state.avatarInitial)
+  const shortUid = useUserStore((state) => state.shortUid)
+  const [showNicknameModal, setShowNicknameModal] = useState(false)
 
   return (
     <header className="app-header">
@@ -47,13 +51,18 @@ export const Header: React.FC<HeaderProps> = ({ activeView, isInRoom, roomTitle,
       </div>
 
       <div className="header-right">
-        <div className="user-profile-badge">
+        <button
+          className="user-profile-badge"
+          style={{ cursor: 'pointer' }}
+          onClick={() => setShowNicknameModal(true)}
+          title="클릭하여 닉네임 변경"
+        >
           <div className="user-avatar-sm" aria-hidden="true">
-            U
+            {avatarInitial}
           </div>
-          <span className="user-name">{uid.slice(0, 6)}</span>
+          <span className="user-name">{displayName}</span>
           <span className="user-uid">#{shortUid}</span>
-        </div>
+        </button>
 
         <button className="btn-secondary-sm" onClick={onOpenInvite}>
           초대코드 입력
@@ -68,6 +77,8 @@ export const Header: React.FC<HeaderProps> = ({ activeView, isInRoom, roomTitle,
           </button>
         )}
       </div>
+
+      <NicknameModal isOpen={showNicknameModal} onClose={() => setShowNicknameModal(false)} />
     </header>
   )
 }

@@ -325,7 +325,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onExit, onKicked }) 
     )
   }
 
-  const shortId = roomId.slice(0, 4)
   const isHost = currentRoom.host === currentUserId
 
   return (
@@ -342,7 +341,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onExit, onKicked }) 
           ) : (
             <span className="badge-scope public">공개방</span>
           )}
-          <span className="room-id-tag">ID: #{shortId}</span>
         </div>
 
         <div className="room-header-actions">
