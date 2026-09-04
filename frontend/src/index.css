@@ -872,7 +872,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  contain: strict;
+  contain: layout paint;
 }
 .chat-system-message {
   text-align: center;
