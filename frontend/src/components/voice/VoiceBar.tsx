@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useVoiceStore, getUid, cleanDeviceLabel } from '../../store/voiceStore'
-import { NOISE_MODEL_META } from '../../lib/noise/types'
 import { VuMeter } from './VuMeter'
 import { AudioSettingsModal } from './AudioSettingsModal'
 
@@ -36,11 +35,6 @@ export const VoiceBar: React.FC = () => {
   const isOutputChanging = useVoiceStore((state) => state.isOutputChanging)
   const outputRouteState = useVoiceStore((state) => state.outputRouteState)
   const outputError = useVoiceStore((state) => state.outputError)
-  const isTestingMic = useVoiceStore((state) => state.isTestingMic)
-  const isNoiseSuppressionEnabled = useVoiceStore((state) => state.isNoiseSuppressionEnabled)
-  const noiseSuppressionModel = useVoiceStore((state) => state.noiseSuppressionModel)
-  const isNoiseLoading = useVoiceStore((state) => state.isNoiseLoading)
-  const isDenoiserSupported = useVoiceStore((state) => state.isDenoiserSupported)
   const error = useVoiceStore((state) => state.error)
   const isAudioAutoplayBlocked = useVoiceStore((state) => state.isAudioAutoplayBlocked)
 
@@ -48,16 +42,11 @@ export const VoiceBar: React.FC = () => {
   const toggleDeafen = useVoiceStore((state) => state.toggleDeafen)
   const setDevice = useVoiceStore((state) => state.setDevice)
   const setOutputDevice = useVoiceStore((state) => state.setOutputDevice)
-  const startMicTest = useVoiceStore((state) => state.startMicTest)
-  const stopMicTest = useVoiceStore((state) => state.stopMicTest)
-  const setNoiseSuppression = useVoiceStore((state) => state.setNoiseSuppression)
   const unlockAudio = useVoiceStore((state) => state.unlockAudio)
 
   const [showSettings, setShowSettings] = useState(false)
   const me = getUid()
   const isMeTalking = useVoiceStore((state) => !!state.speakingUsers[me])
-
-  const modelLabel = NOISE_MODEL_META[noiseSuppressionModel]?.label ?? 'AI 잡음제거'
 
   return (
     <>
@@ -151,24 +140,6 @@ export const VoiceBar: React.FC = () => {
 
           {/* 오디오 액션 */}
           <div className="voicebar-actions">
-            <button
-              className={`voicebar-action-btn ${isTestingMic ? 'active' : ''}`}
-              onClick={() => {
-                if (isTestingMic) void stopMicTest()
-                else void startMicTest()
-              }}
-              title="3초 루프백 마이크 테스트"
-            >
-              {isTestingMic ? '⏹️ 테스트 중지' : '🎙️ 3초 테스트'}
-            </button>
-            <button
-              className={`voicebar-action-btn ${isNoiseSuppressionEnabled ? 'active' : ''}`}
-              disabled={!isDenoiserSupported || isNoiseLoading}
-              onClick={() => void setNoiseSuppression(!isNoiseSuppressionEnabled)}
-              title="AI 딥러닝 잡음 제거 토글"
-            >
-              {isNoiseLoading ? '⏳ 로딩...' : `🧠 ${modelLabel} ${isNoiseSuppressionEnabled ? 'ON' : 'OFF'}`}
-            </button>
             <button
               className={`voicebar-action-btn ${showSettings ? 'active' : ''}`}
               onClick={() => setShowSettings(true)}
