@@ -8,12 +8,11 @@ interface HeaderProps {
   isInRoom: boolean
   roomTitle?: string | null
   onSwitchView: (view: ActiveView) => void
-  onExit: () => void
   onCreateRoom: () => void
   onOpenInvite: () => void
 }
 
-export const Header: React.FC<HeaderProps> = ({ activeView, isInRoom, roomTitle, onSwitchView, onExit, onCreateRoom, onOpenInvite }) => {
+export const Header: React.FC<HeaderProps> = ({ activeView, isInRoom, roomTitle, onSwitchView, onCreateRoom, onOpenInvite }) => {
   const displayName = useUserStore((state) => state.displayName)
   const avatarInitial = useUserStore((state) => state.avatarInitial)
   const shortUid = useUserStore((state) => state.shortUid)
@@ -70,12 +69,6 @@ export const Header: React.FC<HeaderProps> = ({ activeView, isInRoom, roomTitle,
         <button className="btn-primary-sm" onClick={onCreateRoom}>
           + 방 만들기
         </button>
-
-        {isInRoom && (
-          <button className="btn-leave" onClick={onExit}>
-            🚪 나가기
-          </button>
-        )}
       </div>
 
       <NicknameModal isOpen={showNicknameModal} onClose={() => setShowNicknameModal(false)} />

@@ -130,7 +130,6 @@ export function App() {
         isInRoom={!!currentRoomId}
         roomTitle={roomTitle}
         onSwitchView={(view) => (view === 'ROOM' ? handleGotoRoom() : handleGotoLobby())}
-        onExit={() => void handleExplicitExit()}
         onCreateRoom={handleOpenCreateModal}
         onOpenInvite={handleOpenInviteModal}
       />
