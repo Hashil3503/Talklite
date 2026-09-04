@@ -30,7 +30,10 @@ export const ChatLog: React.FC = () => {
   const rowVirtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 72,
+    estimateSize: (index) => {
+      const msg = messages[index]
+      return msg && msg.type === 'IMAGE' && !!msg.mediaUrl ? 72 + 340 : 72
+    },
     overscan: 5,
   })
 
@@ -134,6 +137,8 @@ export const ChatLog: React.FC = () => {
                     left: 0,
                     width: '100%',
                     transform: `translateY(${virtualRow.start}px)`,
+                    // absolute 배치로 flex gap이 적용되지 않으므로 패딩으로 행 간 14px 간격 확보
+                    paddingBottom: 14,
                   }}
                 >
                   <div className={`chat-item ${isMentioned ? 'mentioned' : ''}`}>
