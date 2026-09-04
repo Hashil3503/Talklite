@@ -44,7 +44,21 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 
 ## 🖼️ Screenshots (스크린샷)
 
-> 실제 서비스 스크린샷은 준비 중입니다. (로비 · 보이스 룸 · 통화 중 · 방 생성 화면)
+> 실제 서비스 화면 — 딥다크 Bento UI, 목업 1:1 일치
+
+| 로비 (파티 매칭) | 보이스 룸 |
+| :---: | :---: |
+| <img src="docs/images/로비.png" width="480" alt="Talklite 로비 화면" /> | <img src="docs/images/보이스룸.png" width="480" alt="Talklite 보이스 룸 화면" /> |
+
+| 채팅 (멘션 & 이미지) | 오디오 설정 |
+| :---: | :---: |
+| <img src="docs/images/채팅.png" width="480" alt="Talklite 채팅 화면" /> | <img src="docs/images/통화설정.png" width="480" alt="Talklite 오디오 설정 화면" /> |
+
+| 통화 중 (로비에서도 통화 유지) | 통화 중 플로팅 카드 (데모) |
+| :---: | :---: |
+| <img src="docs/images/통화중.png" width="480" alt="Talklite 통화 중 화면" /> | <video src="docs/images/통화중 플로팅 카드.mp4" width="480" controls loop autoplay muted></video> |
+
+> 💡 **통화 중 플로팅 카드** — 로비를 둘러봐도 우하단 미니 카드로 통화가 유지됩니다. 드래그로 위치 이동이 가능합니다.
 
 ---
 
