@@ -1,14 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useDebounce } from '../lib/debounce'
+import { GAME_PRESETS } from '../lib/gamePresets'
 import { useLobbyStore } from '../store/lobbyStore'
-
-const GAME_PRESETS = [
-  { label: '전체', game: '' },
-  { label: '리그 오브 레전드', game: '리그 오브 레전드' },
-  { label: '발로란트', game: 'Valorant' },
-  { label: '배틀그라운드', game: 'PUBG' },
-  { label: '오버워치 2', game: 'Overwatch 2' },
-]
 
 function resolveQuery(preset: string, query: string, tags: string[]) {
   if (preset) {
@@ -36,6 +29,12 @@ export function SearchBar() {
     search(g, t, sort, order)
   }
 
+  const inputPlaceholder = preset
+    ? '태그 검색 — 프리셋 선택 시 태그로 매칭 (300ms 디바운스)...'
+    : '게임명 또는 태그 검색 (300ms 디바운스)...'
+
+  const inputAriaLabel = preset ? '태그 검색' : '게임명 또는 태그 검색'
+
   return (
     <div className="search-container">
       <form className="search-bar" onSubmit={handleSubmit} role="search">
@@ -45,8 +44,8 @@ export function SearchBar() {
         <input
           type="text"
           className="search-input"
-          placeholder="게임명 또는 태그 검색 (예: 리그 오브 레전드, #다이아, #랭크)..."
-          aria-label="게임명 또는 태그 검색"
+          placeholder={inputPlaceholder}
+          aria-label={inputAriaLabel}
           value={gameInput}
           onChange={(e) => {
             setGameInput(e.target.value)
