@@ -1,5 +1,4 @@
 import React from 'react'
-import { useToastStore } from '../store/toastStore'
 import type { ActiveView } from '../App'
 
 interface HeaderProps {
@@ -13,18 +12,8 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ activeView, isInRoom, roomTitle, onSwitchView, onExit, onCreateRoom, onOpenInvite }) => {
-  const showToast = useToastStore((state) => state.showToast)
   const uid = localStorage.getItem('talklite_uid') || 'anonymous'
   const shortUid = `${uid.slice(0, 4)}${uid.length > 4 ? '…' : ''}`
-
-  const copyUid = async () => {
-    try {
-      await navigator.clipboard.writeText(uid)
-      showToast(`내 익명 ID가 복사되었습니다: ${uid}`, 'success')
-    } catch {
-      showToast('클립보드 복사에 실패했습니다.', 'error')
-    }
-  }
 
   return (
     <header className="app-header">
@@ -58,13 +47,13 @@ export const Header: React.FC<HeaderProps> = ({ activeView, isInRoom, roomTitle,
       </div>
 
       <div className="header-right">
-        <button className="user-profile-badge" onClick={() => void copyUid()} title="클릭하여 내 익명 ID 복사">
+        <div className="user-profile-badge">
           <div className="user-avatar-sm" aria-hidden="true">
             U
           </div>
           <span className="user-name">{uid.slice(0, 6)}</span>
           <span className="user-uid">#{shortUid}</span>
-        </button>
+        </div>
 
         <button className="btn-secondary-sm" onClick={onOpenInvite}>
           초대코드 입력
