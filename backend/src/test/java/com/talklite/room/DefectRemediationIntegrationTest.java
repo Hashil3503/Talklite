@@ -174,7 +174,7 @@ public class DefectRemediationIntegrationTest extends IntegrationTestCleanup {
     @Test
     @DisplayName("실제 런타임 검증 4 [DEF-06]: voice_join.lua 원자적 6인 정원 상한 가드")
     void verifyDef06VoiceJoinLuaCapacityGuard() throws Exception {
-        CreateRoomRequest req = new CreateRoomRequest("Cap Game", List.of("cap"), 8, RoomScope.PUBLIC, RoomType.TEMPORARY, "cap-host");
+        CreateRoomRequest req = new CreateRoomRequest("Cap Game", List.of("cap"), 6, RoomScope.PUBLIC, RoomType.TEMPORARY, "cap-host");
         String res = mockMvc.perform(post("/api/rooms")
                         .header("Authorization", tokenFor("cap-host"))
                         .contentType(MediaType.APPLICATION_JSON)

@@ -14,7 +14,7 @@ import java.util.Optional;
 @Repository
 public class PermanentRoomRepository {
 
-    private static final String COLUMNS = "id, game, tags, capacity, scope, type, host, created_at, updated_at";
+    private static final String COLUMNS = "id, title, game, tags, capacity, scope, type, host, created_at, updated_at";
 
     private final JdbcClient jdbc;
 
@@ -29,9 +29,10 @@ public class PermanentRoomRepository {
 
     public void upsert(Room room, long updatedAt) {
         jdbc.sql("""
-                INSERT INTO permanent_room (id, game, tags, capacity, scope, type, host, created_at, updated_at)
-                VALUES (:id, :game, :tags, :capacity, :scope, :type, :host, :createdAt, :updatedAt)
+                INSERT INTO permanent_room (id, title, game, tags, capacity, scope, type, host, created_at, updated_at)
+                VALUES (:id, :title, :game, :tags, :capacity, :scope, :type, :host, :createdAt, :updatedAt)
                 ON DUPLICATE KEY UPDATE
+                    title = VALUES(title),
                     game = VALUES(game),
                     tags = VALUES(tags),
                     capacity = VALUES(capacity),
@@ -41,6 +42,7 @@ public class PermanentRoomRepository {
                     updated_at = VALUES(updated_at)
                 """)
                 .param("id", room.id())
+                .param("title", room.title())
                 .param("game", room.game())
                 .param("tags", joinTags(room.tags()))
                 .param("capacity", room.capacity())
@@ -66,6 +68,7 @@ public class PermanentRoomRepository {
                 .param("id", roomId)
                 .query((rs, rowNum) -> new Room(
                         rs.getString("id"),
+                        rs.getString("title"),
                         rs.getString("game"),
                         splitTags(rs.getString("tags")),
                         rs.getInt("capacity"),
@@ -81,6 +84,7 @@ public class PermanentRoomRepository {
         return jdbc.sql("SELECT " + COLUMNS + " FROM permanent_room")
                 .query((rs, rowNum) -> new Room(
                         rs.getString("id"),
+                        rs.getString("title"),
                         rs.getString("game"),
                         splitTags(rs.getString("tags")),
                         rs.getInt("capacity"),

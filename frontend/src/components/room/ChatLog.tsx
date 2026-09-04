@@ -85,7 +85,7 @@ export const ChatLog: React.FC = () => {
     <>
       <div
         ref={parentRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3 bg-zinc-900/50 rounded-xl border border-zinc-800"
+        className="flex-1 overflow-y-auto p-4 space-y-3 rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#121217]/60"
         style={{ contain: 'strict' }}
       >
         {messages.length === 0 ? (
@@ -131,10 +131,10 @@ export const ChatLog: React.FC = () => {
                   <div
                     className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words ${
                       isMe
-                        ? 'bg-blue-600 text-white rounded-br-none'
+                        ? 'bg-gradient-to-r from-[#10B981] to-[#50C2F3] text-black rounded-br-none'
                         : isMentioned
                           ? 'bg-amber-900/60 text-amber-100 border border-amber-600/40 rounded-bl-none'
-                          : 'bg-zinc-800 text-zinc-200 rounded-bl-none'
+                          : 'bg-[#171720] text-zinc-200 rounded-bl-none'
                     } ${isImage ? 'min-h-[160px] p-2' : ''}`}
                   >
                     {isImage ? (

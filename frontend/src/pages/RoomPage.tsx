@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useRoomStore } from '../store/roomStore'
 import { useVoiceStore } from '../store/voiceStore'
+import { useToastStore } from '../store/toastStore'
 import { ChatLog } from '../components/room/ChatLog'
 import { MemberList } from '../components/room/MemberList'
 import { InviteModal } from '../components/room/InviteModal'
 import { EditRoomModal } from '../components/room/EditRoomModal'
 import { VoiceBar } from '../components/voice/VoiceBar'
-import { leaveRoom, getRoom, deleteRoom, joinRoom, uploadRoomImage } from '../lib/api'
+import { joinRoom, getRoom, deleteRoom, uploadRoomImage, getRoomInviteCode } from '../lib/api'
 import { getOrCreateAnonymousId } from '../lib/uid'
 
 interface RoomPageProps {
   roomId: string
-  onLeave: () => void
+  onGotoLobby: () => void
+  onExit: () => void
+  onKicked: () => void
 }
 
 async function compressToWebP(file: File): Promise<Blob> {
@@ -78,19 +81,22 @@ async function compressToWebP(file: File): Promise<Blob> {
   })
 }
 
-export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
+export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit, onKicked }) => {
   const currentRoom = useRoomStore((state) => state.currentRoom)
   const setCurrentRoom = useRoomStore((state) => state.setCurrentRoom)
   const sendChat = useRoomStore((state) => state.sendChat)
   const sendImageChat = useRoomStore((state) => state.sendImageChat)
+  const showToast = useToastStore((state) => state.showToast)
 
   const [input, setInput] = useState('')
   const [showInvite, setShowInvite] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [inviteCode, setInviteCode] = useState<string | null>(null)
   const isComposingRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const hadRoomRef = useRef(false)
   const currentUserId = getOrCreateAnonymousId()
 
   // @멘션 자동완성 상태
@@ -223,7 +229,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
       }
     } catch (err) {
       console.error('Clipboard image upload failed:', err)
-      alert('이미지 업로드에 실패했습니다.')
+      showToast('이미지 업로드에 실패했습니다.', 'error')
     } finally {
       setUploading(false)
     }
@@ -236,50 +242,68 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
         .then((room) => setCurrentRoom(room))
         .catch(() => getRoom(roomId).then((room) => setCurrentRoom(room)))
         .catch((err) => {
-          alert(err.message || '방 정보를 불러오지 못했습니다.')
-          onLeave()
+          showToast(err.message || '방 정보를 불러오지 못했습니다.', 'error')
+          onKicked()
         })
         .finally(() => setLoading(false))
     }
-  }, [roomId, currentRoom, setCurrentRoom, onLeave, currentUserId])
+  }, [roomId, currentRoom, setCurrentRoom, onKicked, currentUserId, showToast])
 
+  // P0-01: 뷰 전환 시 음성 세션 지속 — 언마운트 시 disconnectRoomVoice 금지 (명시적 퇴장은 App teardown이 담당)
   useEffect(() => {
-    useVoiceStore.getState().connectRoomVoice(roomId)
-    return () => {
-      useVoiceStore.getState().disconnectRoomVoice()
-    }
+    void useVoiceStore.getState().connectRoomVoice(roomId)
   }, [roomId])
+
+  // REMOTE_EJECT: currentRoom이 원격 소멸/강퇴로 null이 되면 로비로 (RoomPage가 계속 마운트된 경우 방어)
+  useEffect(() => {
+    if (currentRoom) {
+      hadRoomRef.current = true
+    } else if (hadRoomRef.current) {
+      hadRoomRef.current = false
+      onKicked()
+    }
+  }, [currentRoom, onKicked])
 
   useEffect(() => {
     const handleKicked = () => {
-      alert('방장에 의해 강퇴되었습니다.')
-      onLeave()
+      showToast('방장에 의해 강퇴되었습니다.', 'error')
+      onKicked()
     }
     window.addEventListener('talklite:kicked', handleKicked)
     return () => window.removeEventListener('talklite:kicked', handleKicked)
-  }, [onLeave])
+  }, [onKicked, showToast])
+
+  // 6자리 영숫자 순수 초대코드 로드 (getOrCreate — 멱등)
+  useEffect(() => {
+    if (!currentRoom || currentRoom.id !== roomId) return
+    getRoomInviteCode(roomId)
+      .then((res) => setInviteCode(res.code))
+      .catch(() => setInviteCode(null))
+  }, [currentRoom, roomId])
+
+  const copyInviteCode = async () => {
+    if (!inviteCode) return
+    try {
+      await navigator.clipboard.writeText(inviteCode)
+      showToast(`초대코드가 복사되었습니다: ${inviteCode}`, 'success')
+    } catch {
+      showToast('클립보드 복사에 실패했습니다.', 'error')
+    }
+  }
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
     if (isComposingRef.current || !input.trim()) return
-    // 멘션 팝오버가 열려있고 Enter로 전송하려는 경우 멘션 확정 우선
-    if (mentionQuery !== null && mentionCandidates.length > 0) {
-      // Enter는 위 handleKeyDown에서 처리되므로 여기선 무시하지 않음
-    }
     sendChat(input)
     setInput('')
     setMentionQuery(null)
   }
 
-  const handleExit = async () => {
+  const handleExit = () => {
     const lastMember = currentRoom && currentRoom.count === 1 && currentRoom.type === 'TEMPORARY'
     const message = lastMember ? '마지막 인원이므로 방이 삭제됩니다.\n계속 나가시겠습니까?' : '방에서 나가시겠습니까?'
     if (confirm(message)) {
-      try {
-        await leaveRoom(roomId, currentUserId)
-      } catch {}
-      setCurrentRoom(null)
-      onLeave()
+      onExit()
     }
   }
 
@@ -291,45 +315,63 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
     if (!ok) return
     try {
       await deleteRoom(roomId, currentUserId)
-      setCurrentRoom(null)
-      onLeave()
+      onKicked()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '방 삭제에 실패했습니다.'
-      alert(msg)
+      showToast(msg, 'error')
     }
   }
 
   if (loading || !currentRoom) {
     return (
-      <div className="h-screen bg-zinc-950 flex items-center justify-center text-zinc-400">방에 접속 중입니다...</div>
+      <div className="h-screen bg-[#0B0B0E] flex items-center justify-center text-zinc-400">방에 접속 중입니다...</div>
     )
   }
 
   return (
-    <div className="h-screen bg-zinc-950 text-white flex flex-col overflow-hidden">
-      <header className="h-16 px-6 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-3">
-          <button onClick={handleExit} className="text-zinc-400 hover:text-white text-sm font-medium transition-colors">
+    <div className="h-screen bg-[#0B0B0E] text-zinc-100 flex flex-col overflow-hidden">
+      <header className="h-16 px-4 sm:px-6 border-b border-[rgba(255,255,255,0.08)] bg-[#121217]/60 flex items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center space-x-3 min-w-0">
+          <button
+            onClick={onGotoLobby}
+            className="shrink-0 rounded-lg border border-[rgba(255,255,255,0.1)] bg-[#171720] px-3 py-1.5 text-xs font-semibold text-zinc-300 transition-colors hover:text-white hover:border-[rgba(255,255,255,0.2)]"
+          >
             ← 로비로
           </button>
-          <div className="h-4 w-px bg-zinc-800" />
-          <h1 className="text-lg font-bold tracking-tight">{(currentRoom as any).title || currentRoom.game}</h1>
-          <div className="flex items-center gap-1.5">
-            {currentRoom.tags.map((tag) => (
-              <span key={tag} className="text-xs px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300">
-                #{tag}
+          <div className="h-4 w-px bg-[rgba(255,255,255,0.08)]" />
+          <div className="min-w-0">
+            <h1 className="text-base font-bold tracking-tight truncate">
+              {(currentRoom as any).title || currentRoom.game}
+            </h1>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#0B0B0E] text-zinc-400 border border-[rgba(255,255,255,0.08)]">
+                {currentRoom.game}
               </span>
-            ))}
+              {currentRoom.tags.slice(0, 3).map((tag) => (
+                <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#0B0B0E] text-zinc-500">
+                  #{tag}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2 shrink-0">
+          <button
+            onClick={() => void copyInviteCode()}
+            disabled={!inviteCode}
+            title="6자리 초대코드 복사"
+            className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[rgba(80,194,243,0.35)] bg-[#50C2F3]/10 px-3 py-1.5 text-xs font-semibold text-[#50C2F3] transition-colors hover:bg-[#50C2F3]/20 disabled:opacity-50"
+          >
+            🔑 {inviteCode ?? '로딩 중'}
+          </button>
+
           {currentRoom.scope === 'PRIVATE' && (
             <button
               onClick={() => setShowInvite(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition-colors flex items-center gap-1.5"
+              className="sm:hidden px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#171720] hover:bg-[#121217] text-zinc-200 border border-[rgba(255,255,255,0.1)] transition-colors"
             >
-              <span>🔒 초대코드</span>
+              🔒 초대코드
             </button>
           )}
 
@@ -337,13 +379,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
             <>
               <button
                 onClick={() => setShowEdit(true)}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition-colors flex items-center gap-1"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#171720] hover:bg-[#121217] text-zinc-200 border border-[rgba(255,255,255,0.1)] transition-colors flex items-center gap-1"
               >
                 <span>⚙️ 방 설정</span>
               </button>
               <button
                 onClick={handleDeleteRoom}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 transition-colors flex items-center gap-1"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#FF371A]/10 hover:bg-[#FF371A]/20 text-[#FF371A] border border-[rgba(255,55,26,0.35)] transition-colors flex items-center gap-1"
               >
                 <span>🗑️ 방 삭제</span>
               </button>
@@ -352,14 +394,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
 
           <button
             onClick={handleExit}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/40 transition-colors"
+            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#FF371A]/20 hover:bg-[#FF371A]/30 text-[#FF371A] border border-[rgba(255,55,26,0.4)] transition-colors"
           >
-            방 나가기
+            🚪 방 나가기
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden p-6 gap-6 max-w-7xl w-full mx-auto">
+      <div className="flex-1 flex overflow-hidden p-4 sm:p-6 gap-4 sm:gap-6 max-w-7xl w-full mx-auto">
         <main className="flex-1 flex flex-col overflow-hidden gap-4">
           <ChatLog />
 
@@ -381,11 +423,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
                 onCompositionEnd={handleCompositionEnd}
                 placeholder="메시지를 입력하세요... (Enter로 전송, @로 멘션, Ctrl+V로 이미지 붙여넣기)"
                 maxLength={500}
-                className="w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-4 py-3 bg-[#121217] border border-[rgba(255,255,255,0.08)] rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[rgba(80,194,243,0.5)] transition-colors"
               />
               {mentionQuery !== null && mentionCandidates.length > 0 && (
-                <div className="absolute bottom-12 left-0 w-64 rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden z-20">
-                  <div className="px-3 py-2 text-[11px] text-zinc-500 border-b border-zinc-800">멘션 — Tab/Enter로 선택</div>
+                <div className="absolute bottom-12 left-0 w-64 rounded-xl border border-[rgba(255,255,255,0.12)] bg-[#171720] shadow-2xl overflow-hidden z-20">
+                  <div className="px-3 py-2 text-[11px] text-zinc-500 border-b border-[rgba(255,255,255,0.08)]">
+                    멘션 — Tab/Enter로 선택
+                  </div>
                   <ul className="max-h-48 overflow-y-auto py-1">
                     {mentionCandidates.map((c, idx) => (
                       <li
@@ -394,12 +438,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
                           e.preventDefault()
                           applyMention(c)
                         }}
-                        className={`px-3 py-2 text-sm cursor-pointer flex items-center gap-2 ${idx === mentionIndex ? 'bg-zinc-800 text-white' : 'text-zinc-300 hover:bg-zinc-800/60'}`}
+                        className={`px-3 py-2 text-sm cursor-pointer flex items-center gap-2 ${
+                          idx === mentionIndex ? 'bg-[#121217] text-white' : 'text-zinc-300 hover:bg-[#121217]/60'
+                        }`}
                       >
                         <span className="text-amber-400">@</span>
                         <span className="truncate">{c}</span>
                         {(c === 'everyone' || c === 'all') && (
-                          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700">전체</span>
+                          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700">
+                            전체
+                          </span>
                         )}
                       </li>
                     ))}
@@ -410,7 +458,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onLeave }) => {
             <button
               type="submit"
               disabled={!input.trim() || uploading}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white text-sm font-semibold rounded-xl transition-colors shadow-lg shadow-blue-600/20 shrink-0"
+              className="px-6 py-3 bg-gradient-to-r from-[#10B981] to-[#50C2F3] hover:opacity-90 disabled:opacity-40 disabled:hover:opacity-40 text-black text-sm font-bold rounded-xl transition-opacity shadow-lg shadow-emerald-500/20 shrink-0"
             >
               {uploading ? '업로드 중...' : '전송'}
             </button>

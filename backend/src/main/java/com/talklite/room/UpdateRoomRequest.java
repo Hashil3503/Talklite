@@ -12,6 +12,6 @@ public record UpdateRoomRequest(
         @Size(max = 128) String game,
         // raw tags size unchecked here — dedup/normalize in service enforces max 5 unique
         List<@Size(max = 30) String> tags,
-        @Min(2) @Max(10) Integer capacity
+        @Min(2) @Max(value = 6, message = "최대 정원은 6명입니다.") Integer capacity
 ) {
 }

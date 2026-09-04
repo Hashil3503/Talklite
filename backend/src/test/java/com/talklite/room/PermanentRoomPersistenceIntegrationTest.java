@@ -76,7 +76,7 @@ public class PermanentRoomPersistenceIntegrationTest extends IntegrationTestClea
     @Test
     @DisplayName("T-06: 영구 방 생성 시 MariaDB 저장, 방장 승계 DB 동기화, Redis 삭제 후 Rehydrator 복원 검증")
     void permanentRoomPersistenceAndRehydrationFlow() throws Exception {
-        String roomId = createRoom("StarCraft", List.of("clan", "ladder"), 8, RoomScope.PUBLIC, RoomType.PERMANENT, "initial-host");
+        String roomId = createRoom("StarCraft", List.of("clan", "ladder"), 6, RoomScope.PUBLIC, RoomType.PERMANENT, "initial-host");
 
         Optional<Room> savedInDb = permanentRoomRepository.findById(roomId);
         assertTrue(savedInDb.isPresent(), "MariaDB에 저장되어야 함");
@@ -116,5 +116,40 @@ public class PermanentRoomPersistenceIntegrationTest extends IntegrationTestClea
         mockMvc.perform(get("/api/search?game=StarCraft"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(roomId));
+    }
+
+    @Test
+    @DisplayName("P0-03: title 영속화 — DB 저장 + Redis 재기동(rehydrate) 후 복원")
+    void titlePersistedAndRestoredAfterRehydration() throws Exception {
+        String roomId = mockMvc.perform(post("/api/rooms")
+                        .header("Authorization", tokenFor("title-host"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateRoomRequest(
+                                "캐주얼 즐겜 방",
+                                "Apex Legends",
+                                List.of("casual"),
+                                5,
+                                RoomScope.PUBLIC,
+                                RoomType.PERMANENT,
+                                "title-host"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("캐주얼 즐겜 방"))
+                .andReturn().getResponse().getContentAsString();
+        String id = objectMapper.readValue(roomId, RoomResponse.class).id();
+        createdRooms.add(id);
+
+        Optional<Room> savedInDb = permanentRoomRepository.findById(id);
+        assertTrue(savedInDb.isPresent());
+        assertEquals("캐주얼 즐겜 방", savedInDb.get().title(), "MariaDB에 title이 저장되어야 함");
+
+        redis.delete("room:" + id + ":meta");
+        redis.opsForSet().remove("game:apex legends:rooms", id);
+        redis.opsForSet().remove("tag:casual:rooms", id);
+
+        roomRehydrator.rehydrate();
+
+        mockMvc.perform(get("/api/rooms/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("캐주얼 즐겜 방"));
     }
 }
