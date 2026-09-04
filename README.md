@@ -44,15 +44,7 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 
 ## 🖼️ Screenshots (스크린샷)
 
-> 실제 구현 화면 (로비 / 보이스 룸) — 딥다크 Bento UI, 목업 1:1 일치
-
-| 파티 로비 (Lobby) | 보이스 룸 (Room) |
-| :---: | :---: |
-| <img src="docs/images/talklite-spa-lobby-2026-09-04T04-04-29-213Z.png" width="480" alt="Talklite 로비 화면" /> | <img src="docs/images/talklite-spa-room-2026-09-04T04-04-32-979Z.png" width="480" alt="Talklite 보이스 룸 화면" /> |
-
-| UI 목업 (레퍼런스) | 게이머 컨셉 히어로 |
-| :---: | :---: |
-| <img src="docs/images/talklite-mockup-fullpage.png" width="480" alt="Talklite 목업 전체 페이지" /> | <img src="docs/images/talklite-gamer-hero-2026-09-04T04-02-23-179Z.png" width="480" alt="게이머 컨셉 히어로" /> |
+> 실제 서비스 스크린샷은 준비 중입니다. (로비 · 보이스 룸 · 통화 중 · 방 생성 화면)
 
 ---
 
