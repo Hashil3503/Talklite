@@ -40,6 +40,15 @@ Thumbs.db
 docs/*
 !docs/멀티-에이전트-마일스톤-개발-업무지침서.md
 !docs/인수인계서.md
+!docs/images/
+docs/images/*
+!docs/images/*.png
+!docs/images/*.jpg
+!docs/images/*.jpeg
+!docs/images/*.gif
+!docs/images/*.webp
+!docs/images/*.svg
+!docs/images/*.mp4
 
 # Uploads
 backend/uploads/

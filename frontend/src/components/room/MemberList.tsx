@@ -186,7 +186,7 @@ export const MemberList: React.FC<{ roomId: string }> = ({ roomId }) => {
             <span className="voice-status-line">
               <span className="pulse-dot" /> 🎙️ 통화 중 ({voiceCount}명)
             </span>
-            <button className="btn-voice-end" onClick={leaveVoice}>
+            <button className="btn-voice-end" onClick={() => leaveVoice()}>
               통화 종료
             </button>
           </>
