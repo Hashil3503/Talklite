@@ -122,13 +122,16 @@ function loadPttKey(): string {
 }
 
 // Phase 12 — AI 노이즈 제거 영속화 (화이트리스트 검증 탑재)
+// 기본값: localStorage 미설정(최초) 시 true(ON, DeepFilterNet) — 사용자가 명시적으로 끄면 'false' 저장되어 유지
 function loadAiNoiseEnabled(): boolean {
   try {
-    return localStorage.getItem(LS_AI_NOISE_ENABLED) === 'true'
+    const raw = localStorage.getItem(LS_AI_NOISE_ENABLED)
+    if (raw === null) return true
+    return raw === 'true'
   } catch {
     /* ignore */
   }
-  return false
+  return true
 }
 function loadAiNoiseModel(): NoiseSuppressionModel {
   try {
