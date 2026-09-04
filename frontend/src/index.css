@@ -1029,7 +1029,7 @@ body {
 .room-voicebar {
   background: #111118;
   border-top: 1px solid var(--border-color);
-  padding: 10px 24px;
+  padding: 10px 24px 16px;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
   flex-shrink: 0;
 }
