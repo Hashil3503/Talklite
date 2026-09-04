@@ -27,9 +27,9 @@ public class ChatService {
     public static final int DEFAULT_MESSAGE_LIMIT = 50;
     public static final int MAX_MESSAGE_LIMIT = 100;
 
-    /** @멘션 토큰: (^|\\s)@([A-Za-z0-9._\\-가-힣]{1,30}|everyone|all)\\b — hyphen 포함으로 audit-guest-8 같은 UID도 정확히 매칭 */
+    /** @멘션 토큰: (^|\\s)@([A-Za-z0-9._\\-가-힣]{1,64}|everyone|all)\\b — 36자 UUID 멘션 포함 (hyphen 포함) */
     static final Pattern MENTION_PATTERN = Pattern.compile(
-            "(^|\\s)@([A-Za-z0-9._\\-가-힣]{1,30}|everyone|all)\\b",
+            "(^|\\s)@([A-Za-z0-9._\\-가-힣]{1,64}|everyone|all)\\b",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 

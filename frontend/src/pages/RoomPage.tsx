@@ -121,7 +121,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onExit, onKicked }) 
   const updateMentionState = useCallback(
     (value: string, caret: number) => {
       const before = value.slice(0, caret)
-      const m = before.match(/\B@([A-Za-z0-9._가-힣]{0,30})$/)
+      const m = before.match(/\B@([A-Za-z0-9._\-가-힣]{0,64})$/)
       if (m) {
         setMentionQuery(m[1] ?? '')
         setMentionIndex(0)
@@ -147,7 +147,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onExit, onKicked }) 
       const caret = el.selectionStart ?? value.length
       const before = value.slice(0, caret)
       const after = value.slice(caret)
-      const m = before.match(/\B@([A-Za-z0-9._가-힣]{0,30})$/)
+      const m = before.match(/\B@([A-Za-z0-9._\-가-힣]{0,64})$/)
       if (!m) return
       const start = m.index ?? 0
       const nextBefore = before.slice(0, start) + `@${candidate} `
