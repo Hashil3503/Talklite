@@ -46,21 +46,57 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 
 > 실제 서비스 화면 — 딥다크 Bento UI, 목업 1:1 일치
 
-| 로비 (파티 매칭) | 보이스 룸 |
-| :---: | :---: |
-| <img src="docs/images/lobby.png" width="480" alt="Talklite 로비 화면" /> | <img src="docs/images/voice-room.png" width="480" alt="Talklite 보이스 룸 화면" /> |
+<table align="center">
+  <tr>
+    <th align="center">로비 (파티 매칭)</th>
+    <th align="center">보이스 룸</th>
+  </tr>
+  <tr>
+    <td align="center" style="padding: 0 16px;">
+      <img src="docs/images/lobby.png" width="480" alt="Talklite 로비 화면" />
+    </td>
+    <td align="center" style="padding: 0 16px;">
+      <img src="docs/images/voice-room.png" width="480" alt="Talklite 보이스 룸 화면" />
+    </td>
+  </tr>
+</table>
 
-| 채팅 (멘션 & 이미지) | 오디오 설정 |
-| :---: | :---: |
-| <img src="docs/images/chat.png" width="480" alt="Talklite 채팅 화면" /> | <img src="docs/images/audio-settings.png" width="480" alt="Talklite 오디오 설정 화면" /> |
+<table align="center">
+  <tr>
+    <th align="center">채팅 (멘션 &amp; 이미지)</th>
+    <th align="center">오디오 설정</th>
+  </tr>
+  <tr>
+    <td align="center" style="padding: 0 16px;">
+      <img src="docs/images/chat.png" width="480" alt="Talklite 채팅 화면" />
+    </td>
+    <td align="center" style="padding: 0 16px;">
+      <img src="docs/images/audio-settings.png" width="480" alt="Talklite 오디오 설정 화면" />
+    </td>
+  </tr>
+</table>
 
-| 통화 중 (로비에서도 통화 유지) |
-| :---: |
-| <img src="docs/images/talklite-in-call.png" width="480" alt="Talklite 통화 중 화면" /> |
+<table align="center">
+  <tr>
+    <th align="center">통화 중 (로비에서도 통화 유지)</th>
+  </tr>
+  <tr>
+    <td align="center" style="padding: 0 48px;">
+      <img src="docs/images/talklite-in-call.png" width="480" alt="Talklite 통화 중 화면" />
+    </td>
+  </tr>
+</table>
 
-| 통화 중 플로팅 카드 (데모) |
-| :---: |
-| <img src="docs/images/floating-card-demo.gif" width="480" alt="통화 중 플로팅 카드 데모 (GIF)" /> |
+<table align="center">
+  <tr>
+    <th align="center">통화 중 플로팅 카드 (데모)</th>
+  </tr>
+  <tr>
+    <td align="center" style="padding: 0 48px;">
+      <img src="docs/images/floating-card-demo.gif" width="480" alt="통화 중 플로팅 카드 데모 (GIF)" />
+    </td>
+  </tr>
+</table>
 
 > 💡 **통화 중 플로팅 카드** — 로비를 둘러봐도 우하단 미니 카드로 통화가 유지됩니다. 드래그로 위치 이동이 가능합니다.
 
