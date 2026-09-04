@@ -6,6 +6,7 @@ import { useToastStore } from '../store/toastStore'
 import { createRoom, joinWithInviteCode, joinRoom, type RoomScope, type RoomType } from '../lib/api'
 import { subscribeTopic } from '../lib/stomp'
 import { getOrCreateAnonymousId } from '../lib/uid'
+import { GAME_SUGGESTIONS } from '../lib/gamePresets'
 
 const SORT_OPTIONS: { label: string; value: string }[] = [
   { label: '최신순', value: 'latest-desc' },
@@ -15,8 +16,6 @@ const SORT_OPTIONS: { label: string; value: string }[] = [
   { label: '인원 오름차순', value: 'members-asc' },
   { label: '인원 내림차순', value: 'members-desc' },
 ]
-
-const GAME_SUGGESTIONS = ['리그 오브 레전드', 'Valorant', 'PUBG', 'Overwatch 2']
 
 interface LobbyPageProps {
   onJoinRoom: (roomId: string) => void
@@ -212,7 +211,7 @@ export function LobbyPage({
                 id="form-game"
                 className="form-input"
                 list="form-game-suggestions"
-                placeholder="예: 리그 오브 레전드, Valorant, PUBG, Overwatch 2"
+                placeholder="예: 리그 오브 레전드, 발로란트, 배틀그라운드, 오버워치 2"
                 value={game}
                 onChange={(e) => setGame(e.target.value)}
                 required
