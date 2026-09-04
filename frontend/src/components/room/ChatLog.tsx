@@ -3,9 +3,9 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useRoomStore, type ChatMessage } from '../../store/roomStore'
 
 function renderMentions(text: string): React.ReactNode {
-  const parts = text.split(/(@[A-Za-z0-9._가-힣]{1,30})/g)
+  const parts = text.split(/(@[A-Za-z0-9._\-가-힣]{1,64})/g)
   return parts.map((part, i) => {
-    if (/^@[A-Za-z0-9._가-힣]{1,30}$/.test(part)) {
+    if (/^@[A-Za-z0-9._\-가-힣]{1,64}$/.test(part)) {
       return (
         <span key={i} className="mention-tag">
           {part}
