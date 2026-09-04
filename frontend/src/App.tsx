@@ -147,7 +147,6 @@ export function App() {
         currentRoomId && (
           <RoomPage
             roomId={currentRoomId}
-            onGotoLobby={handleGotoLobby}
             onExit={() => void handleExplicitExit()}
             onKicked={handleRemoteEject}
           />

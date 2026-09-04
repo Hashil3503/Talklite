@@ -2,8 +2,23 @@ import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useRoomStore, type ChatMessage } from '../../store/roomStore'
 
+function renderMentions(text: string): React.ReactNode {
+  const parts = text.split(/(@[A-Za-z0-9._가-힣]{1,30})/g)
+  return parts.map((part, i) => {
+    if (/^@[A-Za-z0-9._가-힣]{1,30}$/.test(part)) {
+      return (
+        <span key={i} className="mention-tag">
+          {part}
+        </span>
+      )
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>
+  })
+}
+
 export const ChatLog: React.FC = () => {
   const messages = useRoomStore((state) => state.messages)
+  const currentRoom = useRoomStore((state) => state.currentRoom)
   const currentUserId = localStorage.getItem('talklite_uid') || ''
   const parentRef = useRef<HTMLDivElement>(null)
   const lightboxCloseRef = useRef<HTMLButtonElement>(null)
@@ -19,7 +34,6 @@ export const ChatLog: React.FC = () => {
     overscan: 5,
   })
 
-  // 새 메시지 수신 시 하단 자동 스크롤
   useEffect(() => {
     if (messages.length > 0) {
       rowVirtualizer.scrollToIndex(messages.length - 1, { align: 'end' })
@@ -27,9 +41,7 @@ export const ChatLog: React.FC = () => {
   }, [messages.length, rowVirtualizer])
 
   const handleImageLoad = useCallback(() => {
-    // 가상화 겹침 방지: 이미지 로드 후 동적 높이 재계산
     try {
-      // @ts-ignore tanstack 3.x measure() 존재, 일부 타입에서 누락될 수 있음
       if (typeof (rowVirtualizer as unknown as { measure: () => void }).measure === 'function') {
         ;(rowVirtualizer as unknown as { measure: () => void }).measure()
       } else {
@@ -81,15 +93,17 @@ export const ChatLog: React.FC = () => {
     }
   }, [lightboxUrl])
 
+  const roomTitle = currentRoom?.title || currentRoom?.game || ''
+
   return (
     <>
-      <div
-        ref={parentRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3 rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#121217]/60"
-        style={{ contain: 'strict' }}
-      >
+      <div ref={parentRef} className="chat-log-container">
+        <div className="chat-system-message">
+          🎉 {roomTitle} 파티에 입장했습니다. 음성 세션이 자동으로 활성화되었습니다.
+        </div>
+
         {messages.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-zinc-500 text-sm">
+          <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13, padding: '24px 0' }}>
             아직 대화가 없습니다. 첫 메시지를 남겨보세요!
           </div>
         ) : (
@@ -103,9 +117,11 @@ export const ChatLog: React.FC = () => {
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const msg: ChatMessage = messages[virtualRow.index]
               const isMe = msg.sender === currentUserId
+              const isHost = !!currentRoom && msg.sender === currentRoom.host
               const isMentioned =
                 Array.isArray(msg.mentions) && msg.mentions.includes(currentUserId) && msg.sender !== currentUserId
               const isImage = msg.type === 'IMAGE' && !!msg.mediaUrl
+              const avatarChar = (msg.senderName || msg.sender).charAt(0).toUpperCase() || '?'
 
               return (
                 <div
@@ -119,54 +135,65 @@ export const ChatLog: React.FC = () => {
                     width: '100%',
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
-                  className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} px-1 py-1`}
                 >
-                  <div className="flex items-baseline space-x-2 mb-1">
-                    <span className="text-xs font-semibold text-zinc-400">{msg.senderName || msg.sender}</span>
-                    <span className="text-[10px] text-zinc-600">
-                      {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    {isMentioned && <span className="text-[10px] text-amber-400 font-semibold">@멘션</span>}
-                  </div>
-                  <div
-                    className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words ${
-                      isMe
-                        ? 'bg-gradient-to-r from-[#10B981] to-[#50C2F3] text-black rounded-br-none'
-                        : isMentioned
-                          ? 'bg-amber-900/60 text-amber-100 border border-amber-600/40 rounded-bl-none'
-                          : 'bg-[#171720] text-zinc-200 rounded-bl-none'
-                    } ${isImage ? 'min-h-[160px] p-2' : ''}`}
-                  >
-                    {isImage ? (
-                      <div className="space-y-1">
-                        {msg.content && <div className="px-1 py-1 text-sm">{msg.content}</div>}
-                        {msg.mediaUrl && failedImages.has(msg.mediaUrl) ? (
-                          <div role="img" aria-label="이미지를 불러오지 못했습니다" className="flex min-h-24 min-w-40 items-center justify-center rounded-lg border border-red-900/60 bg-zinc-900 px-4 text-center text-xs text-red-300">
-                            이미지를 불러오지 못했습니다.
+                  <div className={`chat-item ${isMentioned ? 'mentioned' : ''}`}>
+                    <div className="chat-avatar">{avatarChar}</div>
+                    <div className="chat-content">
+                      <div className="chat-header-meta">
+                        <span className={`chat-author ${isHost ? 'host' : ''}`}>
+                          {msg.senderName || msg.sender}
+                          {isHost ? ' 👑' : ''}
+                          {isMe ? ' (나)' : ''}
+                        </span>
+                        <span className="chat-time">
+                          {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        {isMentioned && <span style={{ color: 'var(--brand-primary)', fontSize: 11, fontWeight: 600 }}>@멘션</span>}
+                      </div>
+
+                      <div className="chat-text">
+                        {isImage ? (
+                          <div className="chat-image-preview">
+                            {msg.content && <p>{msg.content}</p>}
+                            {msg.mediaUrl && failedImages.has(msg.mediaUrl) ? (
+                              <div
+                                role="img"
+                                aria-label="이미지를 불러오지 못했습니다"
+                                className="image-mock-box"
+                                style={{ color: 'var(--brand-primary)' }}
+                              >
+                                이미지를 불러오지 못했습니다.
+                              </div>
+                            ) : (
+                              <img
+                                src={msg.mediaUrl ?? undefined}
+                                alt={msg.content || '채팅 이미지'}
+                                loading="lazy"
+                                onLoad={handleImageLoad}
+                                onError={() => msg.mediaUrl && markImageFailed(msg.mediaUrl)}
+                                onClick={() => {
+                                  if (!msg.mediaUrl) return
+                                  previousFocusRef.current = document.activeElement as HTMLElement | null
+                                  setLightboxFailed(false)
+                                  setLightboxUrl(msg.mediaUrl)
+                                }}
+                                style={{ maxWidth: 260, maxHeight: 320, borderRadius: 8, cursor: 'zoom-in', border: '1px solid var(--border-color)' }}
+                              />
+                            )}
                           </div>
                         ) : (
-                          <img
-                            src={msg.mediaUrl ?? undefined}
-                            alt={msg.content || '채팅 이미지'}
-                            loading="lazy"
-                            onLoad={handleImageLoad}
-                            onError={() => msg.mediaUrl && markImageFailed(msg.mediaUrl)}
-                            onClick={() => {
-                              if (!msg.mediaUrl) return
-                              previousFocusRef.current = document.activeElement as HTMLElement | null
-                              setLightboxFailed(false)
-                              setLightboxUrl(msg.mediaUrl)
-                            }}
-                            className="max-w-[260px] max-h-[320px] w-auto h-auto rounded-lg object-contain cursor-zoom-in bg-zinc-900 border border-zinc-700"
-                          />
+                          renderMentions(msg.content)
                         )}
                       </div>
-                    ) : (
-                      msg.content
-                    )}
+
+                      {msg.status === 'pending' && (
+                        <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>전송 중...</span>
+                      )}
+                      {msg.status === 'failed' && (
+                        <span style={{ fontSize: 10, color: 'var(--brand-primary)' }}>전송 실패</span>
+                      )}
+                    </div>
                   </div>
-                  {msg.status === 'pending' && <span className="text-[10px] text-zinc-500 mt-0.5">전송 중...</span>}
-                  {msg.status === 'failed' && <span className="text-[10px] text-red-400 mt-0.5">전송 실패</span>}
                 </div>
               )
             })}
@@ -181,10 +208,10 @@ export const ChatLog: React.FC = () => {
           aria-modal="true"
           aria-label="이미지 확대 보기"
           onClick={() => setLightboxUrl(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
         >
           {lightboxFailed ? (
-            <div role="img" aria-label="이미지를 불러오지 못했습니다" className="rounded-xl border border-red-900/60 bg-zinc-900 px-6 py-10 text-sm text-red-300">
+            <div role="img" aria-label="이미지를 불러오지 못했습니다" className="image-mock-box" style={{ color: 'var(--brand-primary)' }}>
               이미지를 불러오지 못했습니다.
             </div>
           ) : (
@@ -193,14 +220,15 @@ export const ChatLog: React.FC = () => {
               alt="확대 이미지"
               onError={() => setLightboxFailed(true)}
               onClick={(e) => e.stopPropagation()}
-              className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl border border-zinc-700"
+              style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 12, boxShadow: '0 20px 50px rgba(0,0,0,0.8)', border: '1px solid var(--border-color)' }}
             />
           )}
           <button
             ref={lightboxCloseRef}
             onClick={() => setLightboxUrl(null)}
             aria-label="닫기"
-            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center text-lg border border-zinc-700"
+            className="btn-action"
+            style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, fontSize: 18 }}
           >
             ✕
           </button>

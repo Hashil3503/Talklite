@@ -8,11 +8,11 @@ import { InviteModal } from '../components/room/InviteModal'
 import { EditRoomModal } from '../components/room/EditRoomModal'
 import { VoiceBar } from '../components/voice/VoiceBar'
 import { joinRoom, getRoom, deleteRoom, uploadRoomImage, getRoomInviteCode } from '../lib/api'
+import { gameBadgeClass } from '../lib/gameBadge'
 import { getOrCreateAnonymousId } from '../lib/uid'
 
 interface RoomPageProps {
   roomId: string
-  onGotoLobby: () => void
   onExit: () => void
   onKicked: () => void
 }
@@ -81,7 +81,7 @@ async function compressToWebP(file: File): Promise<Blob> {
   })
 }
 
-export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit, onKicked }) => {
+export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onExit, onKicked }) => {
   const currentRoom = useRoomStore((state) => state.currentRoom)
   const setCurrentRoom = useRoomStore((state) => state.setCurrentRoom)
   const sendChat = useRoomStore((state) => state.sendChat)
@@ -107,14 +107,11 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit,
     const q = mentionQuery.toLowerCase()
     const specials = ['everyone', 'all']
     const base = [...currentRoom.members]
-    // 필터
     let filtered = base.filter((m) => m.toLowerCase().includes(q))
-    // everyone/all 후보 추가
     for (const s of specials) {
       if (s.includes(q) && !filtered.includes(s)) filtered.push(s)
     }
     if (q === '') {
-      // 빈 쿼리일 때 멤버 + everyone/all 모두 노출 (최대 8)
       const extras = specials.filter((s) => !filtered.includes(s))
       filtered = [...filtered, ...extras]
     }
@@ -124,7 +121,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit,
   const updateMentionState = useCallback(
     (value: string, caret: number) => {
       const before = value.slice(0, caret)
-      // \B@([A-Za-z0-9._가-힣]{0,30})$ 형태 감지
       const m = before.match(/\B@([A-Za-z0-9._가-힣]{0,30})$/)
       if (m) {
         setMentionQuery(m[1] ?? '')
@@ -158,7 +154,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit,
       const next = nextBefore + after
       setInput(next)
       setMentionQuery(null)
-      // caret 복원
       requestAnimationFrame(() => {
         const pos = nextBefore.length
         el.focus()
@@ -254,7 +249,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit,
     void useVoiceStore.getState().connectRoomVoice(roomId)
   }, [roomId])
 
-  // REMOTE_EJECT: currentRoom이 원격 소멸/강퇴로 null이 되면 로비로 (RoomPage가 계속 마운트된 경우 방어)
+  // REMOTE_EJECT: currentRoom이 원격 소멸/강퇴로 null이 되면 로비로
   useEffect(() => {
     if (currentRoom) {
       hadRoomRef.current = true
@@ -324,113 +319,100 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit,
 
   if (loading || !currentRoom) {
     return (
-      <div className="h-screen bg-[#0B0B0E] flex items-center justify-center text-zinc-400">방에 접속 중입니다...</div>
+      <div className="room-page-layout" style={{ height: '100vh', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'var(--text-muted)' }}>방에 접속 중입니다...</p>
+      </div>
     )
   }
 
+  const shortId = roomId.slice(0, 4)
+  const isHost = currentRoom.host === currentUserId
+
   return (
-    <div className="h-screen bg-[#0B0B0E] text-zinc-100 flex flex-col overflow-hidden">
-      <header className="h-16 px-4 sm:px-6 border-b border-[rgba(255,255,255,0.08)] bg-[#121217]/60 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center space-x-3 min-w-0">
-          <button
-            onClick={onGotoLobby}
-            className="shrink-0 rounded-lg border border-[rgba(255,255,255,0.1)] bg-[#171720] px-3 py-1.5 text-xs font-semibold text-zinc-300 transition-colors hover:text-white hover:border-[rgba(255,255,255,0.2)]"
-          >
-            ← 로비로
-          </button>
-          <div className="h-4 w-px bg-[rgba(255,255,255,0.08)]" />
-          <div className="min-w-0">
-            <h1 className="text-base font-bold tracking-tight truncate">
-              {(currentRoom as any).title || currentRoom.game}
-            </h1>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#0B0B0E] text-zinc-400 border border-[rgba(255,255,255,0.08)]">
-                {currentRoom.game}
-              </span>
-              {currentRoom.tags.slice(0, 3).map((tag) => (
-                <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#0B0B0E] text-zinc-500">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          </div>
+    <div className="room-page-layout">
+      {/* Room Top Bar */}
+      <div className="room-page-header">
+        <div className="room-header-left">
+          <span className={`badge-game ${gameBadgeClass(currentRoom.game)}`}>{currentRoom.game}</span>
+          <h2 className="room-page-title">👑 {currentRoom.title || currentRoom.game}</h2>
+          {currentRoom.scope === 'PRIVATE' ? (
+            <span className="badge-scope private">🔒 비공개</span>
+          ) : currentRoom.type === 'PERMANENT' ? (
+            <span className="badge-scope permanent">영구방 ⭐</span>
+          ) : (
+            <span className="badge-scope public">공개방</span>
+          )}
+          <span className="room-id-tag">ID: #{shortId}</span>
         </div>
 
-        <div className="flex items-center space-x-2 shrink-0">
+        <div className="room-header-actions">
           <button
+            className="btn-action"
             onClick={() => void copyInviteCode()}
             disabled={!inviteCode}
             title="6자리 초대코드 복사"
-            className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[rgba(80,194,243,0.35)] bg-[#50C2F3]/10 px-3 py-1.5 text-xs font-semibold text-[#50C2F3] transition-colors hover:bg-[#50C2F3]/20 disabled:opacity-50"
           >
-            🔑 {inviteCode ?? '로딩 중'}
+            🔗 초대코드 ({inviteCode ?? '로딩 중'})
           </button>
 
-          {currentRoom.scope === 'PRIVATE' && (
-            <button
-              onClick={() => setShowInvite(true)}
-              className="sm:hidden px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#171720] hover:bg-[#121217] text-zinc-200 border border-[rgba(255,255,255,0.1)] transition-colors"
-            >
-              🔒 초대코드
-            </button>
-          )}
-
-          {currentRoom.host === currentUserId && (
+          {isHost && (
             <>
-              <button
-                onClick={() => setShowEdit(true)}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#171720] hover:bg-[#121217] text-zinc-200 border border-[rgba(255,255,255,0.1)] transition-colors flex items-center gap-1"
-              >
-                <span>⚙️ 방 설정</span>
+              <button className="btn-action" onClick={() => setShowEdit(true)} title="방 설정 변경 (방장 전용)">
+                ⚙️ 방 설정
               </button>
-              <button
-                onClick={handleDeleteRoom}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#FF371A]/10 hover:bg-[#FF371A]/20 text-[#FF371A] border border-[rgba(255,55,26,0.35)] transition-colors flex items-center gap-1"
-              >
-                <span>🗑️ 방 삭제</span>
+              <button className="btn-action" onClick={() => void handleDeleteRoom()} title="방 삭제 (방장 전용)">
+                🗑️ 방 삭제
               </button>
             </>
           )}
 
-          <button
-            onClick={handleExit}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#FF371A]/20 hover:bg-[#FF371A]/30 text-[#FF371A] border border-[rgba(255,55,26,0.4)] transition-colors"
-          >
-            🚪 방 나가기
+          <button className="btn-leave" onClick={handleExit} title="방 나가기">
+            🚪 나가기
           </button>
         </div>
-      </header>
+      </div>
 
-      <div className="flex-1 flex overflow-hidden p-4 sm:p-6 gap-4 sm:gap-6 max-w-7xl w-full mx-auto">
-        <main className="flex-1 flex flex-col overflow-hidden gap-4">
+      {/* Room Main Split Layout (좌: MemberList, 우: ChatLog) */}
+      <div className="room-split-body">
+        <MemberList roomId={roomId} />
+
+        <section className="room-chat-section">
           <ChatLog />
 
-          <form onSubmit={handleSend} className="flex gap-2 shrink-0 relative">
-            <div className="flex-1 relative">
+          <div className="chat-input-container">
+            <form className="chat-input-row" onSubmit={handleSend}>
               <input
                 ref={inputRef}
                 type="text"
+                className="chat-input"
+                placeholder="메시지를 입력하세요 (@멘션, Ctrl+V 이미지 붙여넣기 지원)..."
+                maxLength={500}
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                onClick={(e) => updateMentionState(input, (e.target as HTMLInputElement).selectionStart ?? input.length)}
-                onKeyUp={(e) => updateMentionState(input, (e.target as HTMLInputElement).selectionStart ?? input.length)}
+                onClick={(e) =>
+                  updateMentionState(input, (e.target as HTMLInputElement).selectionStart ?? input.length)
+                }
+                onKeyUp={(e) =>
+                  updateMentionState(input, (e.target as HTMLInputElement).selectionStart ?? input.length)
+                }
                 onCompositionStart={() => {
                   isComposingRef.current = true
                   setMentionQuery(null)
                 }}
                 onCompositionEnd={handleCompositionEnd}
-                placeholder="메시지를 입력하세요... (Enter로 전송, @로 멘션, Ctrl+V로 이미지 붙여넣기)"
-                maxLength={500}
-                className="w-full px-4 py-3 bg-[#121217] border border-[rgba(255,255,255,0.08)] rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[rgba(80,194,243,0.5)] transition-colors"
               />
+              <button type="submit" className="btn-chat-send" disabled={!input.trim() || uploading}>
+                {uploading ? '업로드 중...' : '전송'}
+              </button>
+
               {mentionQuery !== null && mentionCandidates.length > 0 && (
-                <div className="absolute bottom-12 left-0 w-64 rounded-xl border border-[rgba(255,255,255,0.12)] bg-[#171720] shadow-2xl overflow-hidden z-20">
-                  <div className="px-3 py-2 text-[11px] text-zinc-500 border-b border-[rgba(255,255,255,0.08)]">
+                <div className="mention-popover" style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 20 }}>
+                  <div className="mention-popover-title" style={{ fontSize: 11, color: 'var(--text-dim)', padding: '4px 8px' }}>
                     멘션 — Tab/Enter로 선택
                   </div>
-                  <ul className="max-h-48 overflow-y-auto py-1">
+                  <ul className="mention-popover-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                     {mentionCandidates.map((c, idx) => (
                       <li
                         key={c}
@@ -438,14 +420,30 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit,
                           e.preventDefault()
                           applyMention(c)
                         }}
-                        className={`px-3 py-2 text-sm cursor-pointer flex items-center gap-2 ${
-                          idx === mentionIndex ? 'bg-[#121217] text-white' : 'text-zinc-300 hover:bg-[#121217]/60'
-                        }`}
+                        style={{
+                          padding: '6px 8px',
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          gap: 6,
+                          alignItems: 'center',
+                          background: idx === mentionIndex ? 'var(--bg-card)' : 'transparent',
+                        }}
                       >
-                        <span className="text-amber-400">@</span>
-                        <span className="truncate">{c}</span>
+                        <span style={{ color: 'var(--brand-yellow)' }}>@</span>
+                        <span className="mention-name" style={{ color: 'var(--text-main)' }}>{c}</span>
                         {(c === 'everyone' || c === 'all') && (
-                          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700">
+                          <span
+                            className="mention-badge"
+                            style={{
+                              fontSize: 10,
+                              marginLeft: 'auto',
+                              padding: '1px 5px',
+                              borderRadius: 3,
+                              background: 'rgba(245, 158, 11, 0.15)',
+                              color: 'var(--brand-yellow)',
+                            }}
+                          >
                             전체
                           </span>
                         )}
@@ -454,21 +452,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit,
                   </ul>
                 </div>
               )}
-            </div>
-            <button
-              type="submit"
-              disabled={!input.trim() || uploading}
-              className="px-6 py-3 bg-gradient-to-r from-[#10B981] to-[#50C2F3] hover:opacity-90 disabled:opacity-40 disabled:hover:opacity-40 text-black text-sm font-bold rounded-xl transition-opacity shadow-lg shadow-emerald-500/20 shrink-0"
-            >
-              {uploading ? '업로드 중...' : '전송'}
-            </button>
-          </form>
-        </main>
-
-        <aside className="h-full flex shrink-0">
-          <MemberList />
-        </aside>
+            </form>
+            <div className="chat-hints">Tip: @ 입력 시 파티원 멘션 자동완성 · 클립보드 이미지 복사 후 붙여넣기 가능</div>
+          </div>
+        </section>
       </div>
+
+      {/* Bottom Always-Visible VoiceBar */}
+      <VoiceBar />
 
       <InviteModal roomId={currentRoom.id} isOpen={showInvite} onClose={() => setShowInvite(false)} />
       <EditRoomModal
@@ -476,12 +467,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onGotoLobby, onExit,
         isOpen={showEdit}
         onClose={() => setShowEdit(false)}
         onUpdated={(updated) => {
-          // 즉시 로컬 반영 (STOMP 전파 전 UX)
           useRoomStore.setState({ currentRoom: updated })
         }}
       />
-
-      <VoiceBar roomId={roomId} />
     </div>
   )
 }
