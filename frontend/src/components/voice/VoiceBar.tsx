@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useVoiceStore } from '../../store/voiceStore'
-import { getUid } from '../../store/voiceStore'
+import { useVoiceStore, getUid, cleanDeviceLabel } from '../../store/voiceStore'
 import { NOISE_MODEL_META, type NoiseSuppressionModel } from '../../lib/noise/types'
 
 const VuMeter: React.FC = () => {
@@ -50,7 +49,13 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const isDeafened = useVoiceStore((state) => state.isDeafened)
   const voiceMembers = useVoiceStore((state) => state.voiceMembers)
   const speaking = useVoiceStore((state) => state.speakingUsers)
-  const audioDevices = useVoiceStore((state) => state.audioDevices)
+  const inputDevices = useVoiceStore((state) => state.inputDevices)
+  const outputDevices = useVoiceStore((state) => state.outputDevices)
+  const selectedSpeakerDeviceId = useVoiceStore((state) => state.selectedSpeakerDeviceId)
+  const canSelectOutput = useVoiceStore((state) => state.canSelectOutput)
+  const isOutputChanging = useVoiceStore((state) => state.isOutputChanging)
+  const outputRouteState = useVoiceStore((state) => state.outputRouteState)
+  const outputError = useVoiceStore((state) => state.outputError)
   const error = useVoiceStore((state) => state.error)
   const isAudioAutoplayBlocked = useVoiceStore((state) => state.isAudioAutoplayBlocked)
   const inputGain = useVoiceStore((state) => state.inputGain)
@@ -70,6 +75,7 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
   const toggleMute = useVoiceStore((state) => state.toggleMute)
   const toggleDeafen = useVoiceStore((state) => state.toggleDeafen)
   const setDevice = useVoiceStore((state) => state.setDevice)
+  const setOutputDevice = useVoiceStore((state) => state.setOutputDevice)
   const unlockAudio = useVoiceStore((state) => state.unlockAudio)
   const setInputGain = useVoiceStore((state) => state.setInputGain)
   const setMasterVolume = useVoiceStore((state) => state.setMasterVolume)
@@ -408,25 +414,51 @@ export const VoiceBar: React.FC<{ roomId: string }> = ({ roomId }) => {
               )}
             </div>
 
-            {audioDevices.length > 0 && (
-              <select
-                value={selectedAudioDeviceId ?? ''}
-                aria-label="마이크 장치 선택"
-                onChange={(e) => {
-                  if (e.target.value) void setDevice(e.target.value)
-                }}
-                className="bg-zinc-800 text-xs text-zinc-300 rounded-full px-3 py-2 focus:outline-none"
-              >
-                <option value="" disabled>
-                  마이크
-                </option>
-                {audioDevices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId} className="bg-zinc-900">
-                    {d.label || '마이크'}
-                  </option>
-                ))}
-              </select>
+            {inputDevices.length > 0 && (
+              <label className="flex items-center gap-1 text-xs text-zinc-400">
+                <span className="sr-only">마이크 입력 장치</span>
+                <span aria-hidden="true">🎙️</span>
+                <select
+                  value={selectedAudioDeviceId ?? inputDevices[0]?.deviceId ?? ''}
+                  aria-label="마이크 입력 장치 선택"
+                  onChange={(e) => {
+                    if (e.target.value) void setDevice(e.target.value)
+                  }}
+                  className="bg-zinc-800 text-xs text-zinc-300 rounded-full px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                >
+                  {inputDevices.map((d, index) => (
+                    <option key={d.deviceId} value={d.deviceId} className="bg-zinc-900">
+                      {cleanDeviceLabel(d.label, `마이크 ${index + 1}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
+
+            {canSelectOutput && outputDevices.length > 0 && (
+              <label className="flex items-center gap-1 text-xs text-zinc-400">
+                <span className="sr-only">스피커 출력 장치</span>
+                <span aria-hidden="true">🔊</span>
+                <select
+                  value={selectedSpeakerDeviceId ?? outputDevices[0]?.deviceId ?? ''}
+                  aria-label="스피커 출력 장치 선택"
+                  aria-busy={isOutputChanging}
+                  disabled={isOutputChanging}
+                  onChange={(e) => void setOutputDevice(e.target.value)}
+                  className="bg-zinc-800 text-xs text-zinc-300 rounded-full px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {outputDevices.map((d, index) => (
+                    <option key={d.deviceId} value={d.deviceId} className="bg-zinc-900">
+                      {cleanDeviceLabel(d.label, `스피커 ${index + 1}`)}
+                    </option>
+                  ))}
+                </select>
+                <span className="sr-only" role="status" aria-live="polite">
+                  {isOutputChanging ? '스피커 전환 중' : outputError ?? (outputRouteState === 'applied' ? '스피커 전환 완료' : '')}
+                </span>
+              </label>
+            )}
+            {error && isInVoice && <span role="status" aria-live="polite" className="sr-only">{error}</span>}
 
             <button
               onClick={leaveVoice}

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Talklite — 실시간 게이머 파티 매칭 & 오픈 보이스 (Taipy UI Refined)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- App Header / Global Navbar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="app-logo" id="nav-logo">
+        <div class="logo-badge">🎙️</div>
+        <span class="logo-text">Talklite</span>
+      </div>
+
+      <!-- View Switcher Tabs (For Mockup Evaluation) -->
+      <div class="view-switcher">
+        <button class="view-tab active" id="tab-lobby-view">🎮 파티 로비 (Lobby)</button>
+        <button class="view-tab" id="tab-room-view">🎙️ 보이스 룸 (Room #8492)</button>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="user-profile-badge">
+        <div class="user-avatar-sm">페</div>
+        <span class="user-name">페이커미드</span>
+        <span class="user-uid">#8f2a</span>
+      </div>
+      <button class="btn-primary-sm" id="header-create-btn">+ 방 만들기</button>
+      <button class="btn-secondary-sm" id="header-invite-btn">초대코드 입력</button>
+    </div>
+  </header>
+
+  <!-- ========================================== -->
+  <!-- 1. LOBBY VIEW (로비 페이지 목업)          -->
+  <!-- ========================================== -->
+  <main class="view-container" id="view-lobby">
+    <div class="container">
+      <!-- Lobby Search & Hero Filter Area -->
+      <section class="lobby-hero">
+        <h1 class="lobby-title">원하는 게임 파티를 찾고 <span class="gradient-text">즉시 음성에 참여하세요</span></h1>
+        <p class="lobby-subtitle">디스코드 설치 없이 웹에서 1초 만에 연결되는 온디맨드 게이밍 보이스</p>
+
+        <div class="search-container">
+          <div class="search-bar">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="lobby-search-input" class="search-input" placeholder="게임명 또는 태그 검색 (예: 리그 오브 레전드, #다이아, #랭크)...">
+            <button class="btn-search">검색</button>
+          </div>
+
+          <div class="game-tag-filters">
+            <button class="tag-filter-btn active" data-game="ALL">전체</button>
+            <button class="tag-filter-btn" data-game="League of Legends">리그 오브 레전드</button>
+            <button class="tag-filter-btn" data-game="Valorant">발로란트</button>
+            <button class="tag-filter-btn" data-game="PUBG">배틀그라운드</button>
+            <button class="tag-filter-btn" data-game="Overwatch 2">오버워치 2</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lobby Live Room Cards Grid -->
+      <section class="room-grid-section">
+        <div class="section-header-row">
+          <div class="status-indicator">
+            <span class="pulse-dot"></span>
+            <span>실시간 모집 중인 방 (<strong>6개</strong>)</span>
+          </div>
+          <div class="sort-select-wrap">
+            <select class="select-sort">
+              <option>최신순</option>
+              <option>인원 많은 순</option>
+              <option>빈자리 있는 순</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="room-grid" id="lobby-room-grid">
+          <!-- Room Card 1 -->
+          <div class="room-card" data-room-id="8492" data-game="League of Legends">
+            <div class="room-card-header">
+              <span class="badge-game lol">League of Legends</span>
+              <span class="room-capacity-badge">
+                <span class="dot-green"></span> 4 / 5명
+              </span>
+            </div>
+            <h3 class="room-title">👑 [다이아] 승급전 정글 구합니다 (보이스 필수, 즐겜)</h3>
+            <div class="room-tags">
+              <span class="tag-pill">#랭크</span>
+              <span class="tag-pill">#다이아</span>
+              <span class="tag-pill">#정글구함</span>
+              <span class="tag-pill active-voice">🎙️ 보이스 활성</span>
+            </div>
+            <div class="room-card-footer">
+              <div class="host-info">
+                <span class="host-crown">👑</span>
+                <span class="host-name">페이커미드</span>
+              </div>
+              <span class="badge-scope public">공개방</span>
+            </div>
+          </div>
+
+          <!-- Room Card 2 -->
+          <div class="room-card" data-room-id="7391" data-game="Valorant">
+            <div class="room-card-header">
+              <span class="badge-game val">Valorant</span>
+              <span class="room-capacity-badge">
+                <span class="dot-green"></span> 3 / 5명
+              </span>
+            </div>
+            <h3 class="room-title">👑 [초월자] 오늘 밤 연승 달릴 엔트리/척후조 모심</h3>
+            <div class="room-tags">
+              <span class="tag-pill">#경쟁전</span>
+              <span class="tag-pill">#초월자</span>
+              <span class="tag-pill">#브리핑빡겜</span>
+              <span class="tag-pill active-voice">🎙️ 보이스 활성</span>
+            </div>
+            <div class="room-card-footer">
+              <div class="host-info">
+                <span class="host-crown">👑</span>
+                <span class="host-name">제스트</span>
+              </div>
+              <span class="badge-scope public">공개방</span>
+            </div>
+          </div>
+
+          <!-- Room Card 3 -->
+          <div class="room-card" data-room-id="6281" data-game="PUBG">
+            <div class="room-card-header">
+              <span class="badge-game pubg">PUBG</span>
+              <span class="room-capacity-badge">
+                <span class="dot-green"></span> 2 / 4명
+              </span>
+            </div>
+            <h3 class="room-title">👑 에란겔 스쿼드 치킨 뜯으실 2분 (오더 가능)</h3>
+            <div class="room-tags">
+              <span class="tag-pill">#스쿼드</span>
+              <span class="tag-pill">#치킨</span>
+              <span class="tag-pill">#즐겜</span>
+              <span class="tag-pill active-voice">🎙️ 보이스 활성</span>
+            </div>
+            <div class="room-card-footer">
+              <div class="host-info">
+                <span class="host-crown">👑</span>
+                <span class="host-name">피오</span>
+              </div>
+              <span class="badge-scope permanent">영구방 ⭐</span>
+            </div>
+          </div>
+
+          <!-- Room Card 4 -->
+          <div class="room-card" data-room-id="5192" data-game="League of Legends">
+            <div class="room-card-header">
+              <span class="badge-game lol">League of Legends</span>
+              <span class="room-capacity-badge">
+                <span class="dot-green"></span> 2 / 5명
+              </span>
+            </div>
+            <h3 class="room-title">👑 칼바람 나락 연속 5판 달릴 분 컴온 (수다 환영)</h3>
+            <div class="room-tags">
+              <span class="tag-pill">#칼바람</span>
+              <span class="tag-pill">#노스트레스</span>
+              <span class="tag-pill active-voice">🎙️ 보이스 활성</span>
+            </div>
+            <div class="room-card-footer">
+              <div class="host-info">
+                <span class="host-crown">👑</span>
+                <span class="host-name">데프트</span>
+              </div>
+              <span class="badge-scope public">공개방</span>
+            </div>
+          </div>
+
+          <!-- Room Card 5 -->
+          <div class="room-card" data-room-id="4284" data-game="Overwatch 2">
+            <div class="room-card-header">
+              <span class="badge-game ow">Overwatch 2</span>
+              <span class="room-capacity-badge">
+                <span class="dot-green"></span> 4 / 5명
+              </span>
+            </div>
+            <h3 class="room-title">👑 그마 힐러 듀오 / 탱커 모십니다 (궁연계 브리핑)</h3>
+            <div class="room-tags">
+              <span class="tag-pill">#경쟁전</span>
+              <span class="tag-pill">#그랜드마스터</span>
+              <span class="tag-pill active-voice">🎙️ 보이스 활성</span>
+            </div>
+            <div class="room-card-footer">
+              <div class="host-info">
+                <span class="host-crown">👑</span>
+                <span class="host-name">쪼낙</span>
+              </div>
+              <span class="badge-scope public">공개방</span>
+            </div>
+          </div>
+
+          <!-- Room Card 6 -->
+          <div class="room-card" data-room-id="3190" data-game="League of Legends">
+            <div class="room-card-header">
+              <span class="badge-game lol">League of Legends</span>
+              <span class="room-capacity-badge">
+                <span class="dot-green"></span> 1 / 2명
+              </span>
+            </div>
+            <h3 class="room-title">👑 [에메랄드] 봇 듀오 서폿 모십니다 (루시안/나미)</h3>
+            <div class="room-tags">
+              <span class="tag-pill">#바텀듀오</span>
+              <span class="tag-pill">#에메랄드</span>
+              <span class="tag-pill active-voice">🎙️ 보이스 활성</span>
+            </div>
+            <div class="room-card-footer">
+              <div class="host-info">
+                <span class="host-crown">👑</span>
+                <span class="host-name">바이퍼</span>
+              </div>
+              <span class="badge-scope public">공개방</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================== -->
+  <!-- 2. ROOM VIEW (방 페이지 목업 - 실제 RoomPage) -->
+  <!-- ========================================== -->
+  <main class="view-container" id="view-room" style="display: none;">
+    <div class="room-page-layout">
+      <!-- Room Top Bar -->
+      <div class="room-page-header">
+        <div class="room-header-left">
+          <span class="badge-game lol">League of Legends</span>
+          <h2 class="room-page-title">👑 [다이아] 승급전 정글 구합니다 (보이스 필수, 즐겜)</h2>
+          <span class="badge-scope public">공개방</span>
+          <span class="room-id-tag">ID: #8492</span>
+        </div>
+
+        <div class="room-header-actions">
+          <button class="btn-action" id="room-copy-invite-btn" title="초대 링크 복사">
+            <span>🔗 초대코드 (TL-8492)</span>
+          </button>
+          <button class="btn-action" id="room-edit-settings-btn" title="방 설정 변경 (방장 전용)">
+            <span>⚙️ 방 설정</span>
+          </button>
+          <button class="btn-leave" id="room-leave-btn" title="방 나가기">
+            <span>🚪 나가기</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Room Main Split Layout (MemberList & ChatLog) -->
+      <div class="room-split-body">
+        <!-- Left: MemberList (참여자 목록 & 볼륨 조절) -->
+        <aside class="room-sidebar-member">
+          <div class="sidebar-header">
+            <span class="sidebar-title">참여자 목록 (<strong id="member-count-text">4</strong>/5)</span>
+            <span class="badge-live-sm"><span class="pulse-dot"></span> P2P MESH</span>
+          </div>
+
+          <div class="member-list-scroll">
+            <!-- Member 1 (Host / Me) -->
+            <div class="member-item speaking">
+              <div class="member-avatar-wrap">
+                <div class="avatar-box avatar-host">페</div>
+                <span class="speaking-ring"></span>
+              </div>
+              <div class="member-meta">
+                <div class="member-name-row">
+                  <span class="member-name">페이커미드 (나)</span>
+                  <span class="crown-icon">👑</span>
+                </div>
+                <span class="member-sub-status">발화 중 · DeepFilterNet ON</span>
+              </div>
+              <div class="member-vol-control">
+                <span class="vol-indicator">100%</span>
+              </div>
+            </div>
+
+            <!-- Member 2 -->
+            <div class="member-item">
+              <div class="member-avatar-wrap">
+                <div class="avatar-box">캐</div>
+              </div>
+              <div class="member-meta">
+                <div class="member-name-row">
+                  <span class="member-name">정글의왕캐니언</span>
+                </div>
+                <span class="member-sub-status">PTT 모드 활성</span>
+              </div>
+              <div class="member-vol-control">
+                <input type="range" min="0" max="200" value="120" class="vol-slider" title="개별 볼륨 조절 (0~200%)">
+                <span class="vol-indicator">120%</span>
+              </div>
+            </div>
+
+            <!-- Member 3 -->
+            <div class="member-item speaking">
+              <div class="member-avatar-wrap">
+                <div class="avatar-box">구</div>
+                <span class="speaking-ring"></span>
+              </div>
+              <div class="member-meta">
+                <div class="member-name-row">
+                  <span class="member-name">구마유시원딜</span>
+                </div>
+                <span class="member-sub-status">발화 중</span>
+              </div>
+              <div class="member-vol-control">
+                <input type="range" min="0" max="200" value="100" class="vol-slider">
+                <span class="vol-indicator">100%</span>
+              </div>
+            </div>
+
+            <!-- Member 4 -->
+            <div class="member-item">
+              <div class="member-avatar-wrap">
+                <div class="avatar-box">케</div>
+              </div>
+              <div class="member-meta">
+                <div class="member-name-row">
+                  <span class="member-name">케리아서폿</span>
+                </div>
+                <span class="member-sub-status">음성 연결됨</span>
+              </div>
+              <div class="member-vol-control">
+                <input type="range" min="0" max="200" value="90" class="vol-slider">
+                <span class="vol-indicator">90%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty slot -->
+          <div class="empty-slot-card">
+            <span>+ 빈 자리 (1명 초대 가능)</span>
+          </div>
+        </aside>
+
+        <!-- Right: ChatLog (실시간 채팅, @멘션, WebP 이미지) -->
+        <section class="room-chat-section">
+          <div class="chat-log-container" id="chat-messages">
+            <!-- System Notice -->
+            <div class="chat-system-message">
+              <span>🎉 [다이아] 승급전 정글 구합니다 파티에 입장했습니다. 음성 세션이 자동으로 활성화되었습니다.</span>
+            </div>
+
+            <!-- Message 1 -->
+            <div class="chat-item">
+              <div class="chat-avatar">캐</div>
+              <div class="chat-content">
+                <div class="chat-header-meta">
+                  <span class="chat-author">정글의왕캐니언</span>
+                  <span class="chat-time">오후 1:02</span>
+                </div>
+                <div class="chat-text">안녕하세요! 오늘 3연승 달리고 승급 갑시다.</div>
+              </div>
+            </div>
+
+            <!-- Message 2 (Mention) -->
+            <div class="chat-item mentioned">
+              <div class="chat-avatar">구</div>
+              <div class="chat-content">
+                <div class="chat-header-meta">
+                  <span class="chat-author">구마유시원딜</span>
+                  <span class="chat-time">오후 1:03</span>
+                </div>
+                <div class="chat-text">
+                  <span class="mention-tag">@페이커미드</span> 방장님 룬 세팅 저 이렇게 가도 될까요?
+                </div>
+              </div>
+            </div>
+
+            <!-- Message 3 (Image Paste Mockup) -->
+            <div class="chat-item">
+              <div class="chat-avatar">페</div>
+              <div class="chat-content">
+                <div class="chat-header-meta">
+                  <span class="chat-author host">페이커미드 👑</span>
+                  <span class="chat-time">오후 1:03</span>
+                </div>
+                <div class="chat-text">네 좋습니다. 전 이렇게 갈게요!</div>
+                <div class="chat-image-preview">
+                  <div class="image-mock-box">
+                    <span>🖼️ Canvas WebP 압축 룬 스크린샷 (72 KB)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chat Input Bar -->
+          <div class="chat-input-container">
+            <div class="chat-input-row">
+              <input type="text" class="chat-input" id="chat-input-text" placeholder="메시지를 입력하세요 (@멘션, Ctrl+V 이미지 붙여넣기 지원)...">
+              <button class="btn-chat-send" id="chat-send-btn">전송</button>
+            </div>
+            <div class="chat-hints">
+              <span>Tip: @ 입력 시 파티원 멘션 자동완성 · 클립보드 이미지 복사 후 붙여넣기 가능</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Bottom Fixed Audio Bar (VoiceBar) -->
+      <footer class="room-voicebar">
+        <div class="voicebar-inner">
+          <!-- Voice Toggles -->
+          <div class="voicebar-controls">
+            <button class="voice-btn" id="toggle-mic-btn" title="마이크 켜기/끄기">
+              <span class="voice-icon">🎙️</span>
+              <span class="voice-btn-label">마이크 켜짐</span>
+            </button>
+            <button class="voice-btn" id="toggle-deafen-btn" title="헤드셋 사운드 켜기/끄기">
+              <span class="voice-icon">🎧</span>
+              <span class="voice-btn-label">스피커 켜짐</span>
+            </button>
+          </div>
+
+          <!-- VU Meter (20-step) -->
+          <div class="voicebar-vu-wrap">
+            <div class="vu-meta-row">
+              <span class="vu-title">VU 레벨 미터</span>
+              <span class="vu-db" id="voicebar-db">-22 dB</span>
+            </div>
+            <div class="vu-bars" id="voicebar-vu-bars">
+              <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+              <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+              <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+              <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+            </div>
+          </div>
+
+          <!-- Hardware Devices Select (Mic & Speaker setSinkId) -->
+          <div class="voicebar-devices">
+            <div class="device-select-group">
+              <label class="device-label">🎙️ 마이크</label>
+              <select class="select-device-sm" id="room-mic-select">
+                <option>HyperX QuadCast S</option>
+                <option>SteelSeries Arctis Nova 7</option>
+                <option>Realtek High Definition Audio</option>
+              </select>
+            </div>
+
+            <div class="device-select-group">
+              <label class="device-label">🔊 스피커 (setSinkId)</label>
+              <select class="select-device-sm" id="room-speaker-select">
+                <option>SteelSeries Arctis Nova 7 (Headset)</option>
+                <option>Realtek Digital Output (Speaker)</option>
+                <option>기본 시스템 오디오</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Audio Engine & Feature Buttons -->
+          <div class="voicebar-actions">
+            <button class="voicebar-action-btn" id="room-test-mic-btn" title="3초 루프백 마이크 테스트">
+              <span>🎙️ 3초 테스트</span>
+            </button>
+            <button class="voicebar-action-btn active" id="room-noise-btn" title="WASM 딥러닝 잡음 제거">
+              <span>🧠 DeepFilterNet ON</span>
+            </button>
+            <button class="voicebar-action-btn" id="room-ptt-btn" title="Push-to-Talk 단축키 설정">
+              <span>⌨️ PTT (V키)</span>
+            </button>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </main>
+
+  <!-- ========================================== -->
+  <!-- MODALS (방 만들기 & 초대코드 모달)         -->
+  <!-- ========================================== -->
+  <!-- Create Room Modal -->
+  <div class="modal-overlay" id="create-room-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">🎮 새 파티 만들기</h3>
+        <button class="modal-close" id="close-create-modal">&times;</button>
+      </div>
+
+      <form id="create-room-form">
+        <div class="form-group">
+          <label class="form-label">게임 선택 <span class="req">*</span></label>
+          <select class="form-select" id="form-game">
+            <option value="League of Legends">리그 오브 레전드 (League of Legends)</option>
+            <option value="Valorant">발로란트 (Valorant)</option>
+            <option value="PUBG">배틀그라운드 (PUBG)</option>
+            <option value="Overwatch 2">오버워치 2 (Overwatch 2)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">방 제목 <span class="req">*</span></label>
+          <input type="text" class="form-input" id="form-title" placeholder="예: [다이아] 승급전 듀오 구합니다 (보이스 필수)" required value="[다이아] 승급전 정글 구합니다 (보이스 필수, 즐겜)">
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">최대 정원 (2~6인)</label>
+            <select class="form-select" id="form-capacity">
+              <option value="2">2명 (듀오)</option>
+              <option value="3">3명 (트리오)</option>
+              <option value="4">4명 (스쿼드)</option>
+              <option value="5" selected>5명 (팀 파티)</option>
+              <option value="6">6명 (최대 정원)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">공개 범위</label>
+            <select class="form-select" id="form-scope">
+              <option value="PUBLIC">공개방</option>
+              <option value="PRIVATE">비공개 (초대코드 전용)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">태그 (쉼표로 구분)</label>
+          <input type="text" class="form-input" id="form-tags" placeholder="예: 랭크, 다이아, 빡겜, 마이크필수" value="랭크, 다이아, 정글구함">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">방 유형</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="roomType" value="TEMPORARY" checked>
+              <span>휘발성 방 (전원 퇴장 시 자동 소멸)</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="roomType" value="PERMANENT">
+              <span>영구 방 (대화 영속화 & 방장 고아 자동 승계)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="btn-cancel-create">취소</button>
+          <button type="submit" class="btn-primary">방 생성하고 입장하기 &rarr;</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Invite Code Join Modal -->
+  <div class="modal-overlay" id="invite-join-modal">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔑 초대코드로 입장</h3>
+        <button class="modal-close" id="close-invite-modal">&times;</button>
+      </div>
+
+      <form id="invite-join-form">
+        <div class="form-group">
+          <label class="form-label">초대코드 (6자리)</label>
+          <input type="text" class="form-input" id="invite-code-input" placeholder="예: TL-8492" required style="text-transform: uppercase; font-family: var(--font-mono); letter-spacing: 2px; font-size: 16px; text-align: center;">
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="btn-cancel-invite">취소</button>
+          <button type="submit" class="btn-primary">입장하기</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="app-toast" class="app-toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

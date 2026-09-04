@@ -3,7 +3,7 @@ import type { Client } from '@stomp/stompjs'
 import { ensureStompConnected } from '../lib/stomp'
 import { WebRtcManager } from '../lib/webrtc'
 import { AudioDetector } from '../lib/audioDetector'
-import { VoiceAudioEngineImpl } from '../lib/voiceAudioEngine'
+import { VoiceAudioEngineImpl, type OutputDeviceResult } from '../lib/voiceAudioEngine'
 import { isDenoiserSupported, isNoiseSuppressionModel, type NoiseSuppressionModel } from '../lib/noise/types'
 
 // ── 전역 리소스 (React 상태 아님)
@@ -15,6 +15,8 @@ let stompClient: Client | null = null
 let wasInVoice = false
 let activeRoomId: string | null = null
 let engine: VoiceAudioEngineImpl | null = null
+let voiceSessionGeneration = 0
+let deviceListenerAttached = false
 
 // ── localStorage 키 & 디바운스
 const LS_INPUT_GAIN = 'talklite_input_gain'
@@ -26,6 +28,7 @@ const LS_PTT_KEY = 'talklite_ptt_key'
 const LS_AI_NOISE_ENABLED = 'talklite_ai_noise_enabled'
 const LS_AI_NOISE_MODEL = 'talklite_ai_noise_model'
 const LS_AUDIO_DEVICE_ID = 'talklite_audio_device_id'
+const LS_SPEAKER_DEVICE_ID = 'talklite_speaker_device_id'
 
 let inputGainTimer: ReturnType<typeof setTimeout> | null = null
 let masterTimer: ReturnType<typeof setTimeout> | null = null
@@ -167,14 +170,102 @@ function saveSelectedDeviceId(id: string | null): void {
     /* ignore */
   }
 }
+function loadSelectedSpeakerDeviceId(): string | null {
+  try {
+    const raw = localStorage.getItem(LS_SPEAKER_DEVICE_ID)
+    return raw && raw.length > 0 && raw.length <= 512 ? raw : null
+  } catch {
+    return null
+  }
+}
+function saveSelectedSpeakerDeviceId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(LS_SPEAKER_DEVICE_ID, id)
+    else localStorage.removeItem(LS_SPEAKER_DEVICE_ID)
+  } catch {
+    /* ignore */
+  }
+}
+function supportsAudioContextSink(): boolean {
+  return typeof AudioContext !== 'undefined' && 'setSinkId' in AudioContext.prototype
+}
+function supportsMediaElementSink(): boolean {
+  return typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype
+}
+function isSinkIdSupported(): boolean {
+  return supportsAudioContextSink() || supportsMediaElementSink()
+}
+export function cleanDeviceLabel(rawLabel: string, defaultName: string): string {
+  if (!rawLabel) return defaultName
+  const cleaned = rawLabel.replace(/^(기본값|통신|Default|Communications)\s*-\s*/i, '').trim()
+  return cleaned || defaultName
+}
+
+export function filterRealDevices(devices: MediaDeviceInfo[]): MediaDeviceInfo[] {
+  // 1. Chromium 가상/별칭 장치('default', 'communications') 제거
+  const physicalOnly = devices.filter(
+    (d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications'
+  )
+  const pool = physicalOnly.length > 0 ? physicalOnly : devices.filter((d) => d.deviceId)
+  const seen = new Set<string>()
+  const result: MediaDeviceInfo[] = []
+  for (const d of pool) {
+    if (seen.has(d.deviceId)) continue
+    seen.add(d.deviceId)
+    result.push(d)
+  }
+  return result
+}
+
 async function refreshAudioDevices(): Promise<void> {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices()
-    const inputs = devices.filter((d) => d.kind === 'audioinput')
-    useVoiceStore.setState({ audioDevices: inputs })
-    // 동기화: 저장된 selectedId가 목록에 없으면 유지하되, 목록이 비어있지 않으면 불일치 경고만 (자동 리셋 안 함)
+    const inputs = filterRealDevices(devices.filter((d) => d.kind === 'audioinput'))
+    const outputs = filterRealDevices(devices.filter((d) => d.kind === 'audiooutput'))
+    const state = useVoiceStore.getState()
+    const appliedId = engine?.getAppliedSpeakerDeviceId()
+
+    let nextSelectedMic = state.selectedAudioDeviceId
+    if (inputs.length > 0 && (!nextSelectedMic || !inputs.some((d) => d.deviceId === nextSelectedMic))) {
+      nextSelectedMic = inputs[0].deviceId
+      saveSelectedDeviceId(nextSelectedMic)
+    }
+
+    let nextSelectedSpeaker = state.selectedSpeakerDeviceId
+    if (outputs.length > 0 && (!nextSelectedSpeaker || !outputs.some((d) => d.deviceId === nextSelectedSpeaker))) {
+      nextSelectedSpeaker = outputs[0].deviceId
+      saveSelectedSpeakerDeviceId(nextSelectedSpeaker)
+    }
+
+    useVoiceStore.setState({
+      audioDevices: inputs,
+      inputDevices: inputs,
+      outputDevices: outputs,
+      selectedAudioDeviceId: nextSelectedMic,
+      selectedSpeakerDeviceId: nextSelectedSpeaker,
+      deviceEnumerationState: 'ready',
+    })
+
+    if (state.isInVoice && appliedId && !outputs.some((device) => device.deviceId === appliedId)) {
+      const currentGeneration = voiceSessionGeneration
+      const fallbackTarget = outputs[0]?.deviceId ?? ''
+      const result = await engine?.setOutputDevice(fallbackTarget)
+      if (currentGeneration !== voiceSessionGeneration || !result?.applied) return
+      useVoiceStore.setState({
+        selectedSpeakerDeviceId: fallbackTarget || null,
+        outputRouteState: 'fallback',
+        outputError: '선택한 스피커가 제거되어 사용 가능한 스피커로 전환했습니다.',
+      })
+      saveSelectedSpeakerDeviceId(fallbackTarget || null)
+    }
   } catch {
-    // ignore
+    useVoiceStore.setState({ deviceEnumerationState: 'stale' })
+  }
+}
+function removeDeviceChangeListener(): void {
+  if (typeof navigator !== 'undefined' && navigator.mediaDevices?.removeEventListener && deviceListenerAttached) {
+    navigator.mediaDevices.removeEventListener('devicechange', refreshAudioDevices)
+    deviceListenerAttached = false
   }
 }
 
@@ -341,6 +432,8 @@ function cleanupMicTestInternal(): void {
 }
 
 function cleanupVoiceResources(): void {
+  voiceSessionGeneration++
+  removeDeviceChangeListener()
   micTestAborted = true
   manager?.destroy()
   manager = null
@@ -358,6 +451,7 @@ function cleanupVoiceResources(): void {
   if (useVoiceStore.getState().isNoiseLoading) {
     useVoiceStore.setState({ isNoiseLoading: false })
   }
+  useVoiceStore.setState({ isOutputChanging: false, outputRouteState: 'idle' })
   // PTT 릴리즈 타이머 정리 (Stuck 해제)
   if (pttReleaseTimer) {
     clearTimeout(pttReleaseTimer)
@@ -475,7 +569,19 @@ interface VoiceState {
   voiceMembers: string[]
   speakingUsers: Record<string, boolean>
   audioDevices: MediaDeviceInfo[]
+  inputDevices: MediaDeviceInfo[]
+  outputDevices: MediaDeviceInfo[]
   selectedAudioDeviceId: string | null
+  selectedSpeakerDeviceId: string | null
+  isSinkIdSupported: boolean
+  supportsAudioContextSink: boolean
+  supportsMediaElementSink: boolean
+  canSelectOutput: boolean
+  outputRouteMode: 'audio-context' | 'unsupported'
+  deviceEnumerationState: 'unknown' | 'ready' | 'stale'
+  isOutputChanging: boolean
+  outputRouteState: 'idle' | 'changing' | 'applied' | 'partial' | 'fallback' | 'failed'
+  outputError: string | null
   error: string | null
   isAudioAutoplayBlocked: boolean
   // Phase 8 volumes
@@ -505,6 +611,7 @@ interface VoiceState {
   toggleMute: () => void
   toggleDeafen: () => void
   setDevice: (deviceId: string) => Promise<void>
+  setOutputDevice: (deviceId: string) => Promise<void>
   handleVoiceMembers: (members: string[]) => void
   unlockAudio: () => Promise<void>
   // Phase 8 setters
@@ -529,7 +636,19 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   voiceMembers: [],
   speakingUsers: {},
   audioDevices: [],
+  inputDevices: [],
+  outputDevices: [],
   selectedAudioDeviceId: loadSelectedDeviceId(),
+  selectedSpeakerDeviceId: loadSelectedSpeakerDeviceId(),
+  isSinkIdSupported: isSinkIdSupported(),
+  supportsAudioContextSink: supportsAudioContextSink(),
+  supportsMediaElementSink: supportsMediaElementSink(),
+  canSelectOutput: supportsAudioContextSink(),
+  outputRouteMode: supportsAudioContextSink() ? 'audio-context' : 'unsupported',
+  deviceEnumerationState: 'unknown',
+  isOutputChanging: false,
+  outputRouteState: 'idle',
+  outputError: null,
   error: null,
   isAudioAutoplayBlocked: false,
   inputGain: loadInputGain(),
@@ -563,25 +682,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         // 파싱 실패 무시
       }
     })
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices()
-      const inputs = devices.filter((d) => d.kind === 'audioinput')
-      set({ audioDevices: inputs })
-      // selectedAudioDeviceId가 목록에 없으면 유지 (핫플러그 재연결 대비), 목록이 비어있지 않으면 불일치 무시
-    } catch {
-      set({ audioDevices: [] })
-    }
-    // devicechange 동기화 리스너 등록 (중복 방지)
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.addEventListener) {
-      try {
-        navigator.mediaDevices.removeEventListener('devicechange', refreshAudioDevices)
-      } catch {
-        // ignore
-      }
+    await refreshAudioDevices()
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.addEventListener && !deviceListenerAttached) {
       try {
         navigator.mediaDevices.addEventListener('devicechange', refreshAudioDevices)
+        deviceListenerAttached = true
       } catch {
-        // ignore
+        deviceListenerAttached = false
       }
     }
   },
@@ -617,6 +724,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
     }
     activeRoomId = roomId
+    const sessionGeneration = ++voiceSessionGeneration
     try {
       if (!manager) {
         manager = new WebRtcManager({
@@ -676,7 +784,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
       rawMicStream = rawStream
       // 장치 목록 최신화 (권한 획득 후 label 확보)
-      void refreshAudioDevices()
+      await refreshAudioDevices()
 
       const eng = ensureEngine()
       const { inputGain, masterVolume } = get()
@@ -687,6 +795,23 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const processed = eng.initializeInput(rawStream)
       // P0-2: AudioContext suspended 무음 방어 — 제스처 체인 내부에서 resume 선행 (실패 시에만 배너)
       const resumeOk = await eng.resume()
+      const savedSpeakerDeviceId = get().selectedSpeakerDeviceId
+      const availableOutputs = get().outputDevices
+      const validSavedSpeakerDeviceId = savedSpeakerDeviceId && (availableOutputs.length === 0 || availableOutputs.some((device) => device.deviceId === savedSpeakerDeviceId)) ? savedSpeakerDeviceId : null
+      if (savedSpeakerDeviceId && !validSavedSpeakerDeviceId) {
+        set({ selectedSpeakerDeviceId: null, outputRouteState: 'fallback', outputError: '저장된 스피커를 찾을 수 없어 기본 스피커를 사용합니다.' })
+        saveSelectedSpeakerDeviceId(null)
+      }
+      if (validSavedSpeakerDeviceId && sessionGeneration === voiceSessionGeneration) {
+        const restored = await eng.setOutputDevice(validSavedSpeakerDeviceId)
+        if (sessionGeneration !== voiceSessionGeneration) return
+        if (!restored.applied) {
+          set({ selectedSpeakerDeviceId: null, outputRouteState: 'failed', outputError: '저장된 스피커를 복원하지 못해 기본 스피커를 사용합니다.' })
+          saveSelectedSpeakerDeviceId(null)
+        } else {
+          set({ outputRouteState: restored.partialFailure ? 'partial' : 'applied', outputError: restored.partialFailure ? '일부 보조 출력 경로를 적용하지 못했습니다.' : null })
+        }
+      }
       // 초기 송신 상태 적용 (PTT 모드면 무음, voice_activity면 송신)
       applyTransmitState()
       // Mute 상태 동기화 보조: applyTransmitState가 이미 처리하지만, 초기 false 보장
@@ -826,6 +951,29 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       set({ error: `마이크 전환 실패: ${detail}` })
       setTimeout(() => set({ error: null }), 3000)
     }
+  },
+
+  setOutputDevice: async (deviceId: string) => {
+    if (typeof deviceId !== 'string') return
+    const eng = engine
+    if (!eng || !get().canSelectOutput) return
+    const previousId = get().selectedSpeakerDeviceId
+    const sessionGeneration = voiceSessionGeneration
+    set({ selectedSpeakerDeviceId: deviceId || null, isOutputChanging: true, outputRouteState: 'changing', outputError: null })
+    const result: OutputDeviceResult = await eng.setOutputDevice(deviceId)
+    if (sessionGeneration !== voiceSessionGeneration || engine !== eng || get().selectedSpeakerDeviceId !== (deviceId || null)) return
+    if (result.applied) {
+      const nextId = result.appliedDeviceId
+      set({ selectedSpeakerDeviceId: nextId, isOutputChanging: false, outputRouteState: result.partialFailure ? 'partial' : 'applied', outputError: result.partialFailure ? '일부 보조 출력 경로를 적용하지 못했습니다.' : null })
+      saveSelectedSpeakerDeviceId(nextId)
+      return
+    }
+    set({ selectedSpeakerDeviceId: previousId, isOutputChanging: false, outputRouteState: 'failed', outputError: '스피커 출력 장치를 전환하지 못했습니다.' })
+    saveSelectedSpeakerDeviceId(previousId)
+    setTimeout(() => {
+      if (get().outputError === '스피커 출력 장치를 전환하지 못했습니다.') set({ outputError: null, outputRouteState: 'idle' })
+    }, 3000)
+    void refreshAudioDevices()
   },
 
   unlockAudio,
