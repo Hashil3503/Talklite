@@ -54,17 +54,13 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 | :---: | :---: |
 | <img src="docs/images/chat.png" width="480" alt="Talklite 채팅 화면" /> | <img src="docs/images/audio-settings.png" width="480" alt="Talklite 오디오 설정 화면" /> |
 
-**통화 중** — 로비를 둘러봐도 통화 유지
+| 통화 중 (로비에서도 통화 유지) |
+| :---: |
+| <img src="docs/images/talklite-in-call.png" width="480" alt="Talklite 통화 중 화면" /> |
 
-<div align="center">
-  <img src="docs/images/talklite-in-call.png" width="480" alt="Talklite 통화 중 화면" />
-</div>
-
-**통화 중 플로팅 카드 (데모)**
-
-<div align="center">
-  <img src="docs/images/floating-card-demo.gif" width="480" alt="통화 중 플로팅 카드 데모 (GIF)" />
-</div>
+| 통화 중 플로팅 카드 (데모) |
+| :---: |
+| <img src="docs/images/floating-card-demo.gif" width="480" alt="통화 중 플로팅 카드 데모 (GIF)" /> |
 
 > 💡 **통화 중 플로팅 카드** — 로비를 둘러봐도 우하단 미니 카드로 통화가 유지됩니다. 드래그로 위치 이동이 가능합니다.
 
