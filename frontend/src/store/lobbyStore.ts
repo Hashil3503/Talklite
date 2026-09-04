@@ -45,7 +45,8 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
       const rooms = await searchRooms({ game: game || undefined, tags: tags.length ? tags.join(',') : undefined, sort, order })
       set({ rooms, loading: false })
     } catch {
-      set({ error: '검색 오류', loading: false })
+      // 서버 최초 기동/일시적 네트워크 지연 시에도 자연스러운 "개설된 공개 방이 없습니다" 안내를 위해 무음 처리
+      set({ rooms: [], loading: false, error: null })
     }
   },
   handleRoomUpdated: (event: any) => {
