@@ -82,7 +82,8 @@ export function App() {
   // EXIT_ROOM: 단일 teardown — leaveVoice() -> leaveRoom(API) -> setCurrentRoom(null) 순서 고정
   const handleExplicitExit = async () => {
     const roomId = currentRoomId
-    useVoiceStore.getState().leaveVoice()
+    // 방 완전 퇴장 — 통화 종료 알림음은 울리지 않도록 silent
+    useVoiceStore.getState().leaveVoice(true)
     if (roomId) {
       try {
         await leaveRoom(roomId, getOrCreateAnonymousId())

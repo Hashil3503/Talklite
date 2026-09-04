@@ -611,7 +611,7 @@ interface VoiceState {
   disconnectRoomVoice: () => void
   forceDisconnectVoice: () => void
   joinVoice: (roomId: string) => Promise<void>
-  leaveVoice: () => void
+  leaveVoice: (silent?: boolean) => void
   toggleMute: () => void
   toggleDeafen: () => void
   setDevice: (deviceId: string) => Promise<void>
@@ -863,9 +863,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
   },
 
-  leaveVoice: () => {
-    // 명시적 퇴장 시 로컬 종료 효과음 (force/강제 경로에서는 미재생)
-    void playVoiceLeaveSound()
+  leaveVoice: (silent?: boolean) => {
+    // silent=true(방 나가기)면 종료음 미재생 / 기본(통화 종료 버튼)은 종료음 유지. force/강제 경로는 미재생
+    if (!silent) {
+      void playVoiceLeaveSound()
+    }
     if (activeRoomId) {
       stompClient?.publish({ destination: `/app/room/${activeRoomId}/voice/end`, body: '{}' })
     }
