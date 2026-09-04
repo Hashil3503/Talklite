@@ -5,6 +5,7 @@ import { WebRtcManager } from '../lib/webrtc'
 import { AudioDetector } from '../lib/audioDetector'
 import { VoiceAudioEngineImpl, type OutputDeviceResult } from '../lib/voiceAudioEngine'
 import { isDenoiserSupported, isNoiseSuppressionModel, type NoiseSuppressionModel } from '../lib/noise/types'
+import { playVoiceJoinSound, playVoiceLeaveSound } from '../lib/audioPing'
 
 // ── 전역 리소스 (React 상태 아님)
 let manager: WebRtcManager | null = null
@@ -847,6 +848,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         error: null,
         isAudioAutoplayBlocked: !resumeOk,
       })
+      // 참여 성공 시 로컬 참여 효과음 (본인만 재생, Web Audio 합성)
+      void playVoiceJoinSound()
       // 재적용 (isMuted 리셋 후)
       applyTransmitState()
     } catch (err: unknown) {
@@ -858,6 +861,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   leaveVoice: () => {
+    // 명시적 퇴장 시 로컬 종료 효과음 (force/강제 경로에서는 미재생)
+    void playVoiceLeaveSound()
     if (activeRoomId) {
       stompClient?.publish({ destination: `/app/room/${activeRoomId}/voice/end`, body: '{}' })
     }
