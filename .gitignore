@@ -48,7 +48,6 @@ docs/images/*
 !docs/images/*.gif
 !docs/images/*.webp
 !docs/images/*.svg
-!docs/images/*.mp4
 
 # Uploads
 backend/uploads/
