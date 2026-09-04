@@ -12,6 +12,17 @@
 import { createDenoiseNode, disposeHandle, type DenoiseEngineHandle } from './noise/denoiseEngine'
 import type { NoiseSuppressionModel } from './noise/types'
 
+export interface OutputDeviceResult {
+  applied: boolean
+  appliedDeviceId: string | null
+  audioContextApplied: boolean
+  mediaElementFailures: number
+  partialFailure: boolean
+  stale: boolean
+  destroyed: boolean
+  errorName?: string
+}
+
 export interface VoiceAudioEngine {
   initializeInput(rawStream: MediaStream): MediaStream
   replaceInput(rawStream: MediaStream): MediaStream
@@ -21,6 +32,8 @@ export interface VoiceAudioEngine {
   setPeerVolume(peerId: string, value: number): void
   setMasterVolume(value: number): void
   setDeafened(value: boolean): void
+  setOutputDevice(deviceId: string): Promise<OutputDeviceResult>
+  getAppliedSpeakerDeviceId(): string | null
   resume(): Promise<boolean>
   destroy(): void
   getProcessedStream(): MediaStream | null
@@ -51,6 +64,10 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   private storedMasterVolume = 1
   private currentMasterVolume = 1
   private currentInputGain = 1
+  private appliedSpeakerDeviceId: string | null = null
+  private sinkSeq = 0
+  private destroyed = false
+  private mediaElementSinkFailures = 0
 
   // Phase 12 — 단순 스왑: 단일 worklet 노드로 축소 (이중 Gain 제거)
   private denoiseHandle: DenoiseEngineHandle | null = null
@@ -301,6 +318,11 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     }
 
     this.peerMap.set(peerId, { source, gain, stream, audioEl })
+    if (audioEl && this.appliedSpeakerDeviceId && 'setSinkId' in audioEl) {
+      void (audioEl as HTMLAudioElement & { setSinkId: (deviceId: string) => Promise<void> }).setSinkId(this.appliedSpeakerDeviceId).catch(() => {
+        this.mediaElementSinkFailures++
+      })
+    }
   }
 
   removeRemote(peerId: string): void {
@@ -368,6 +390,70 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
       }
     }
     // P0-C: deafen도 Web Audio 단일 경로 — audioEl은 항상 muted:true이므로 추가 동기화 불필요
+  }
+
+  async setOutputDevice(deviceId: string): Promise<OutputDeviceResult> {
+    const failed = (errorName?: string): OutputDeviceResult => ({
+      applied: false,
+      appliedDeviceId: this.appliedSpeakerDeviceId,
+      audioContextApplied: false,
+      mediaElementFailures: 0,
+      partialFailure: false,
+      stale: false,
+      destroyed: this.destroyed,
+      errorName,
+    })
+    if (!this.ctx || typeof deviceId !== 'string' || this.destroyed) return failed()
+    const seq = ++this.sinkSeq
+    const previousId = this.appliedSpeakerDeviceId ?? ''
+    const context = this.ctx as AudioContext & { setSinkId?: (sinkId: string) => Promise<void> }
+    if (typeof context.setSinkId !== 'function') return failed('NotSupportedError')
+
+    try {
+      await context.setSinkId(deviceId)
+    } catch (error) {
+      try {
+        await context.setSinkId(previousId)
+      } catch {
+        this.appliedSpeakerDeviceId = null
+      }
+      return failed((error as { name?: string })?.name)
+    }
+
+    if (seq !== this.sinkSeq || this.destroyed || this.ctx !== context) {
+      return { ...failed(), stale: true, destroyed: this.destroyed }
+    }
+
+    const mediaResults = await Promise.all(
+      Array.from(this.peerMap.values()).map(async (peer) => {
+        if (!peer.audioEl || !('setSinkId' in peer.audioEl)) return true
+        try {
+          await (peer.audioEl as HTMLAudioElement & { setSinkId: (sinkId: string) => Promise<void> }).setSinkId(deviceId)
+          return true
+        } catch {
+          return false
+        }
+      }),
+    )
+    const mediaElementFailures = mediaResults.filter((result) => !result).length
+    this.mediaElementSinkFailures += mediaElementFailures
+    if (seq !== this.sinkSeq || this.destroyed || this.ctx !== context) {
+      return { ...failed(), stale: true, destroyed: this.destroyed }
+    }
+    this.appliedSpeakerDeviceId = deviceId || null
+    return {
+      applied: true,
+      appliedDeviceId: this.appliedSpeakerDeviceId,
+      audioContextApplied: true,
+      mediaElementFailures,
+      partialFailure: mediaElementFailures > 0,
+      stale: false,
+      destroyed: false,
+    }
+  }
+
+  getAppliedSpeakerDeviceId(): string | null {
+    return this.appliedSpeakerDeviceId
   }
 
   async resume(): Promise<boolean> {
@@ -549,6 +635,8 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   }
 
   destroy(): void {
+    this.sinkSeq++
+    this.destroyed = true
     // P1-4: denoise -> peerMap -> source -> ctx 순서 고정 (+ audioEl 정리)
     this.teardownDenoiseNodes()
     this.noiseSuppressionEnabled = false
