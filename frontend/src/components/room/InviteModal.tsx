@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { getInviteCode } from '../../lib/api'
+import { useToastStore } from '../../store/toastStore'
 
 interface InviteModalProps {
   roomId: string
@@ -9,9 +10,9 @@ interface InviteModalProps {
 
 export const InviteModal: React.FC<InviteModalProps> = ({ roomId, isOpen, onClose }) => {
   const [code, setCode] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const showToast = useToastStore((state) => state.showToast)
 
   const currentUserId = localStorage.getItem('talklite_uid') || ''
 
@@ -30,9 +31,10 @@ export const InviteModal: React.FC<InviteModalProps> = ({ roomId, isOpen, onClos
 
   const handleCopy = () => {
     if (code) {
-      navigator.clipboard.writeText(code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      navigator.clipboard
+        .writeText(code)
+        .then(() => showToast(`초대코드가 복사되었습니다: ${code}`, 'success'))
+        .catch(() => showToast('클립보드 복사에 실패했습니다.', 'error'))
     }
   }
 
@@ -63,9 +65,9 @@ export const InviteModal: React.FC<InviteModalProps> = ({ roomId, isOpen, onClos
             </span>
             <button
               onClick={handleCopy}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#50C2F3]/15 hover:bg-[#50C2F3]/25 text-[#50C2F3] border border-[rgba(80,194,243,0.35)] transition-colors"
             >
-              {copied ? '복사됨! ✨' : '코드 복사'}
+              코드 복사
             </button>
           </div>
         )}

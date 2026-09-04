@@ -121,6 +121,7 @@ public class RoomMapper {
 
     public void save(Room room) {
         Map<String, String> hash = new LinkedHashMap<>();
+        putTitleIfPresent(hash, room.title());
         hash.put("game", room.game());
         hash.put("tags", String.join(",", room.tags()));
         hash.put("capacity", String.valueOf(room.capacity()));
@@ -140,6 +141,7 @@ public class RoomMapper {
     /** Re-hydration(기동 시) 0명 복원 — 메타 작성 + PUBLIC만 역색인 등록, members/joined_at 미기록 (T-06) */
     public void restore(Room room) {
         Map<String, String> hash = new LinkedHashMap<>();
+        putTitleIfPresent(hash, room.title());
         hash.put("game", room.game());
         hash.put("tags", String.join(",", room.tags()));
         hash.put("capacity", String.valueOf(room.capacity()));
@@ -165,6 +167,7 @@ public class RoomMapper {
                 : List.of(tagsValue.split(","));
         return new Room(
                 roomId,
+                (String) hash.get("title"),
                 (String) hash.get("game"),
                 tags,
                 Integer.parseInt((String) hash.get("capacity")),
@@ -173,6 +176,12 @@ public class RoomMapper {
                 (String) hash.get("host"),
                 Long.parseLong((String) hash.get("createdAt"))
         );
+    }
+
+    private void putTitleIfPresent(Map<String, String> hash, String title) {
+        if (title != null && !title.isBlank()) {
+            hash.put("title", title.trim());
+        }
     }
 
     public List<String> members(String roomId) {

@@ -61,7 +61,7 @@ public class PerformanceLatencyIntegrationTest extends IntegrationTestCleanup {
     @Test
     @DisplayName("NFR-PERF-01 & NFR-PERF-03: 500개 병렬 동시 Join 요청 시 정원 원자성 보장 및 99% 응답 지연 <= 200ms 검증")
     void concurrent500JoinRequestsLatencyAndCapacityGuard() throws Exception {
-        int capacity = 10;
+        int capacity = 6;
         int totalRequests = 500;
 
         String json = mockMvc.perform(post("/api/rooms")
@@ -114,11 +114,11 @@ public class PerformanceLatencyIntegrationTest extends IntegrationTestCleanup {
         doneLatch.await(30, TimeUnit.SECONDS);
         executor.shutdown();
 
-        assertEquals(capacity - 1, successCount.get(), "호스트 제외 정확히 정원 수(19명)만큼만 성공해야 함");
+        assertEquals(capacity - 1, successCount.get(), "호스트 제외 정확히 정원 수(5명)만큼만 성공해야 함");
         assertEquals(totalRequests - (capacity - 1), fullCount.get(), "나머지는 409(room_full)이어야 함");
 
         Long memberCount = redis.opsForSet().size("room:" + roomId + ":members");
-        assertEquals((long) capacity, memberCount, "Redis 멤버 수도 정확히 20명이어야 함");
+        assertEquals((long) capacity, memberCount, "Redis 멤버 수도 정확히 6명이어야 함");
 
         double avgLatency = latencies.stream().mapToLong(Long::longValue).average().orElse(0.0);
         latencies.sort(Long::compareTo);

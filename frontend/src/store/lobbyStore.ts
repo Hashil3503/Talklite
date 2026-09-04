@@ -1,14 +1,23 @@
 import { create } from 'zustand'
 import { searchRooms, type RoomResponse } from '../lib/api'
 
+export type SortKey = 'latest' | 'title' | 'members'
+export type SortOrder = 'asc' | 'desc'
+
 interface LobbyState {
   game: string
   tags: string[]
+  preset: string
+  sort: SortKey
+  order: SortOrder
   rooms: RoomResponse[]
   loading: boolean
   error: string | null
-  search: (game: string, tags: string[]) => Promise<void>
+  search: (game: string, tags: string[], sort?: SortKey, order?: SortOrder) => Promise<void>
   setGame: (game: string) => void
+  setPreset: (preset: string) => void
+  setSort: (sort: SortKey) => void
+  setOrder: (order: SortOrder) => void
   toggleTag: (tag: string) => void
   handleRoomUpdated: (event: any) => void
 }
@@ -16,18 +25,24 @@ interface LobbyState {
 export const useLobbyStore = create<LobbyState>((set, get) => ({
   game: '',
   tags: [],
+  preset: '',
+  sort: 'latest',
+  order: 'desc',
   rooms: [],
   loading: false,
   error: null,
   setGame: (game) => set({ game }),
+  setPreset: (preset) => set({ preset }),
+  setSort: (sort) => set({ sort }),
+  setOrder: (order) => set({ order }),
   toggleTag: (tag) => {
     const tags = get().tags
     set({ tags: tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag] })
   },
-  search: async (game, tags) => {
+  search: async (game, tags, sort = 'latest', order = 'desc') => {
     set({ loading: true, error: null })
     try {
-      const rooms = await searchRooms({ game: game || undefined, tags: tags.length ? tags.join(',') : undefined })
+      const rooms = await searchRooms({ game: game || undefined, tags: tags.length ? tags.join(',') : undefined, sort, order })
       set({ rooms, loading: false })
     } catch {
       set({ error: '검색 오류', loading: false })

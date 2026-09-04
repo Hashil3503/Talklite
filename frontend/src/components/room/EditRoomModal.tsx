@@ -174,13 +174,13 @@ export const EditRoomModal: React.FC<EditRoomModalProps> = ({ room, isOpen, onCl
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1.5">최대 정원 (2~10명)</label>
+            <label className="block text-xs font-semibold text-zinc-400 mb-1.5">최대 정원 (2~6명)</label>
             <select
               value={capacity}
               onChange={(e) => setCapacity(Number(e.target.value))}
               className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-white focus:outline-none focus:border-emerald-500"
             >
-              {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+              {[2, 3, 4, 5, 6].map((n) => (
                 <option key={n} value={n}>
                   {n}명
                 </option>

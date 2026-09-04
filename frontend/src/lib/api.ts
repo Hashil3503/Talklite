@@ -18,6 +18,8 @@ export interface RoomResponse {
 export interface SearchParams {
   game?: string
   tags?: string
+  sort?: 'latest' | 'title' | 'members'
+  order?: 'asc' | 'desc'
 }
 
 export type KickType = 'TEMPORARY' | 'PERMANENT'
@@ -104,6 +106,7 @@ export async function kickUser(roomId: string, actor: string, targetUser: string
 }
 
 export interface CreateRoomInput {
+  title?: string
   game: string
   tags: string[]
   capacity: number
@@ -154,6 +157,12 @@ export async function getInviteCode(roomId: string, actor: string): Promise<Invi
   return res.json()
 }
 
+export async function getRoomInviteCode(roomId: string): Promise<InviteCodeResponse> {
+  const res = await fetch(`/api/rooms/${roomId}/invite`, { headers: getAuthHeaders() })
+  if (!res.ok) return parseError(res)
+  return res.json()
+}
+
 export async function joinWithInviteCode(code: string, user: string): Promise<RoomResponse> {
   const res = await fetch(`/api/invite/${encodeURIComponent(code)}/join`, {
     method: 'POST',
@@ -174,6 +183,8 @@ export async function searchRooms(params: SearchParams = {}): Promise<RoomRespon
   const query = new URLSearchParams()
   if (params.game) query.set('game', params.game)
   if (params.tags) query.set('tags', params.tags)
+  if (params.sort) query.set('sort', params.sort)
+  if (params.order) query.set('order', params.order)
   const qs = query.toString()
   const res = await fetch(`/api/search${qs ? `?${qs}` : ''}`, { headers: getAuthHeaders() })
   if (!res.ok) {

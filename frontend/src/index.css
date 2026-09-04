@@ -1,1 +1,78 @@
 @import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #0b0b0e;
+  --color-bg-surface: #121217;
+  --color-bg-elevated: #171720;
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-focused: rgba(255, 255, 255, 0.18);
+  --color-accent-red: #ff371a;
+  --color-accent-cyan: #50c2f3;
+  --color-accent-violet: #8b5cf6;
+  --color-accent-emerald: #10b981;
+}
+
+:root {
+  --bg-primary: #0b0b0e;
+  --bg-surface: #121217;
+  --bg-elevated: #171720;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-focused: rgba(255, 255, 255, 0.18);
+  --accent-red: #ff371a;
+  --accent-cyan: #50c2f3;
+  --accent-violet: #8b5cf6;
+  --accent-emerald: #10b981;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: #f4f4f5;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Noto Sans KR',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Taipy 스타일 Bento 카드 공통 서피스 */
+.bento-surface {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+}
+
+.bento-elevated {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+}
+
+.bento-card-hover {
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.bento-card-hover:hover {
+  border-color: var(--border-focused);
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(80, 194, 243, 0.08);
+}
+
+::selection {
+  background-color: rgba(80, 194, 243, 0.35);
+}

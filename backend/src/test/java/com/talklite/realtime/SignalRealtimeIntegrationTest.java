@@ -57,7 +57,7 @@ public class SignalRealtimeIntegrationTest extends IntegrationTestCleanup {
                         .header("Authorization", tokenFor(host))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateRoomRequest(
-                                game, List.of("vc"), 8,
+                                game, List.of("vc"), 6,
                                 RoomScope.PUBLIC, RoomType.TEMPORARY, host))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();

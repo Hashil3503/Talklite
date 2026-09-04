@@ -51,10 +51,10 @@ export const MemberList: React.FC = () => {
   }
 
   return (
-    <div ref={containerRef} className="w-64 bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 flex flex-col">
-      <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-3">
+    <div ref={containerRef} className="w-64 rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#121217]/70 p-4 flex flex-col">
+      <div className="flex items-center justify-between pb-3 border-b border-[rgba(255,255,255,0.08)] mb-3">
         <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">참여자 목록</h3>
-        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-950/60 text-blue-400 border border-blue-800/40">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#50C2F3]/10 text-[#50C2F3] border border-[rgba(80,194,243,0.3)]">
           {currentRoom.count} / {currentRoom.capacity}명
         </span>
       </div>
@@ -74,7 +74,7 @@ export const MemberList: React.FC = () => {
             <div
               key={member}
               data-peer-card={member}
-              className="flex flex-col rounded-lg bg-zinc-800/40 hover:bg-zinc-800/80 transition-colors group"
+              className="flex flex-col rounded-lg bg-[#171720]/60 hover:bg-[#171720] transition-colors group"
             >
               <div className="flex items-center justify-between px-2.5 py-2">
                 <div className="flex items-center space-x-2 min-w-0">
@@ -140,7 +140,7 @@ export const MemberList: React.FC = () => {
               </div>
 
               {inVoice && !isMe && isOpen && (
-                <div className="mx-2 mb-2 rounded-lg border border-zinc-700 bg-zinc-900 p-2.5">
+                <div className="mx-2 mb-2 rounded-lg border border-[rgba(255,255,255,0.1)] bg-[#0B0B0E] p-2.5">
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-xs font-semibold text-zinc-300">{member} 볼륨</span>
                     <span className="text-xs font-mono text-sky-400">{volPercent}%</span>

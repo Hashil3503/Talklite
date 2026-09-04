@@ -37,4 +37,10 @@ Thumbs.db
 .env.*
 
 # Docs
-docs/
+docs/*
+!docs/멀티-에이전트-마일스톤-개발-업무지침서.md
+!docs/인수인계서.md
+
+# Uploads
+backend/uploads/
+uploads/

@@ -48,10 +48,13 @@ public class RoomService {
 
 
 
+    private static final int TITLE_MAX_LENGTH = 50;
+
     public RoomResponse create(CreateRoomRequest request, String principal) {
         String host = principal;
         Room room = new Room(
                 UUID.randomUUID().toString().substring(0, 8),
+                resolveTitle(request.title(), request.game()),
                 request.game().trim(),
                 request.tags() == null ? List.of() : request.tags().stream().filter(t -> t != null && !t.isBlank()).map(String::trim).toList(),
                 request.capacity(),
@@ -68,6 +71,14 @@ public class RoomService {
         return get(room.id());
     }
 
+    /** P0-03: title 미입력/blank 시 "[게임명] 파티" 기본값, 최대 50자 truncate (substring 단순 절단) */
+    private String resolveTitle(String rawTitle, String game) {
+        String title = rawTitle == null || rawTitle.isBlank()
+                ? "[" + game.trim() + "] 파티"
+                : rawTitle.trim();
+        return title.length() > TITLE_MAX_LENGTH ? title.substring(0, TITLE_MAX_LENGTH) : title;
+    }
+
     public RoomResponse create(CreateRoomRequest request) {
         return create(request, request.host());
     }
@@ -77,8 +88,7 @@ public class RoomService {
         if (room == null) {
             throw new RoomNotFoundException(roomId);
         }
-        String title = (String) redis.opsForHash().get(roomMapper.metaKey(roomId), "title");
-        return RoomResponse.from(room, roomMapper.members(roomId), title);
+        return RoomResponse.from(room, roomMapper.members(roomId), room.title());
     }
 
     public RoomResponse join(String roomId, String user) {
@@ -178,8 +188,7 @@ public class RoomService {
             boolean removed = roomMapper.deleteRoom(roomId, room);
             if (removed) {
                 eventPublisher.publishRoomRemoved(room);
-                String title = (String) redis.opsForHash().get(roomMapper.metaKey(roomId), "title");
-                return RoomResponse.from(room, List.of(), title);
+                return RoomResponse.from(room, List.of(), room.title());
             }
         }
 
@@ -255,7 +264,7 @@ public class RoomService {
         int newCapacity;
         if (request.capacity() != null) {
             newCapacity = request.capacity();
-            if (newCapacity < 2 || newCapacity > 10) {
+            if (newCapacity < 2 || newCapacity > 6) {
                 throw new IllegalArgumentException("capacity out of range");
             }
         } else {
