@@ -1,21 +1,49 @@
 import { useEffect, useState } from 'react'
 import { RoomCard } from '../components/RoomCard'
 import { SearchBar } from '../components/SearchBar'
-import { useLobbyStore } from '../store/lobbyStore'
+import { useLobbyStore, type SortKey, type SortOrder } from '../store/lobbyStore'
 import { useToastStore } from '../store/toastStore'
 import { createRoom, joinWithInviteCode, joinRoom, type RoomScope, type RoomType } from '../lib/api'
 import { subscribeTopic } from '../lib/stomp'
 import { getOrCreateAnonymousId } from '../lib/uid'
 
+const SORT_OPTIONS: { label: string; value: string }[] = [
+  { label: '최신순', value: 'latest-desc' },
+  { label: '오래된순', value: 'latest-asc' },
+  { label: '제목 오름차순', value: 'title-asc' },
+  { label: '제목 내림차순', value: 'title-desc' },
+  { label: '인원 오름차순', value: 'members-asc' },
+  { label: '인원 내림차순', value: 'members-desc' },
+]
+
+const GAME_SUGGESTIONS = ['리그 오브 레전드', 'Valorant', 'PUBG', 'Overwatch 2']
+
 interface LobbyPageProps {
   onJoinRoom: (roomId: string) => void
+  showCreateModal?: boolean
+  setShowCreateModal?: (open: boolean) => void
+  showInviteModal?: boolean
+  setShowInviteModal?: (open: boolean) => void
 }
 
-export function LobbyPage({ onJoinRoom }: LobbyPageProps) {
-  const { rooms, loading, error, search } = useLobbyStore()
+export function LobbyPage({
+  onJoinRoom,
+  showCreateModal,
+  setShowCreateModal,
+  showInviteModal,
+  setShowInviteModal,
+}: LobbyPageProps) {
+  const { rooms, loading, error, sort, order, setSort, setOrder, search } = useLobbyStore()
   const showToast = useToastStore((state) => state.showToast)
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showInviteModal, setShowInviteModal] = useState(false)
+
+  // 내부/외부(Header) 공용 모달 상태 — props 미지원 시 로컬 폴백
+  const [localCreate, setLocalCreate] = useState(false)
+  const [localInvite, setLocalInvite] = useState(false)
+  const createOpen = showCreateModal ?? localCreate
+  const inviteOpen = showInviteModal ?? localInvite
+  const openCreate = () => (setShowCreateModal ? setShowCreateModal(true) : setLocalCreate(true))
+  const closeCreate = () => (setShowCreateModal ? setShowCreateModal(false) : setLocalCreate(false))
+  const closeInvite = () => (setShowInviteModal ? setShowInviteModal(false) : setLocalInvite(false))
 
   // 방 만들기 폼 상태
   const [title, setTitle] = useState('')
@@ -71,7 +99,7 @@ export function LobbyPage({ onJoinRoom }: LobbyPageProps) {
         type,
         host: getCurrentUserId(),
       })
-      setShowCreateModal(false)
+      closeCreate()
       onJoinRoom(room.id)
     } catch (err: any) {
       showToast(err.message || '방 생성에 실패했습니다.', 'error')
@@ -85,7 +113,7 @@ export function LobbyPage({ onJoinRoom }: LobbyPageProps) {
 
     try {
       const room = await joinWithInviteCode(inviteCodeInput.trim().toUpperCase(), getCurrentUserId())
-      setShowInviteModal(false)
+      closeInvite()
       onJoinRoom(room.id)
     } catch (err: any) {
       setInviteError(err.message || '초대코드 입장에 실패했습니다.')
@@ -101,203 +129,244 @@ export function LobbyPage({ onJoinRoom }: LobbyPageProps) {
     }
   }
 
+  const sortedValue = `${sort}-${order}`
+
   return (
-    <div className="min-h-screen bg-[#0B0B0E] text-zinc-100 px-4 sm:px-6 py-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-end gap-2">
-        <button
-          onClick={() => setShowInviteModal(true)}
-          className="rounded-xl border border-[rgba(255,255,255,0.1)] bg-[#121217] px-4 py-2 text-sm font-semibold text-zinc-200 transition-colors hover:border-[rgba(255,255,255,0.2)]"
-        >
-          🔑 초대코드로 입장
-        </button>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="rounded-xl bg-gradient-to-r from-[#FF371A] to-[#8B5CF6] px-4 py-2 text-sm font-bold text-white transition-transform hover:scale-105 shadow-lg shadow-[#FF371A]/20"
-        >
-          + 파티 생성
-        </button>
-      </div>
+    <div className="view-container" id="view-lobby">
+      <div className="container">
+        {/* Lobby Search & Hero Filter Area */}
+        <section className="lobby-hero">
+          <h1 className="lobby-title">
+            원하는 게임 파티를 찾고 <span className="gradient-text">즉시 음성에 참여하세요</span>
+          </h1>
+          <p className="lobby-subtitle">디스코드 설치 없이 웹에서 1초 만에 연결되는 온디맨드 게이밍 보이스</p>
+          <SearchBar />
+        </section>
 
-      <SearchBar />
+        {/* Lobby Live Room Cards Grid */}
+        <section className="room-grid-section">
+          <div className="section-header-row">
+            <div className="status-indicator">
+              <span className="pulse-dot" />
+              <span>
+                실시간 모집 중인 방 (<strong>{rooms.length}개</strong>)
+              </span>
+            </div>
+            <div className="sort-select-wrap">
+              <select
+                className="select-sort"
+                value={sortedValue}
+                aria-label="정렬 기준"
+                onChange={(e) => {
+                  const [s, o] = e.target.value.split('-')
+                  setSort(s as SortKey)
+                  setOrder(o as SortOrder)
+                }}
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-      {loading && <p className="text-center text-zinc-500 py-8">검색 중...</p>}
-      {error && <p className="text-center text-[#FF371A] py-4">{error}</p>}
+          {loading && <p className="text-center text-muted py-8">검색 중...</p>}
+          {error && <p className="text-center" style={{ color: 'var(--brand-primary)' }}>{error}</p>}
 
-      {!loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {rooms.map((room) => (
-            <RoomCard key={room.id} room={room} onSelect={handleSelectRoom} />
-          ))}
-        </div>
-      )}
+          {!loading && (
+            <div className="room-grid" id="lobby-room-grid">
+              {rooms.map((room) => (
+                <RoomCard key={room.id} room={room} onSelect={handleSelectRoom} />
+              ))}
+            </div>
+          )}
 
-      {!loading && rooms.length === 0 && (
-        <div className="text-center py-16 space-y-3 bento-surface">
-          <p className="text-zinc-500">개설된 공개 방이 없습니다.</p>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="text-sm font-semibold text-[#50C2F3] hover:underline"
-          >
-            지금 첫 번째 방을 만들어보세요!
-          </button>
-        </div>
-      )}
-
-      {/* 방 만들기 모달 */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bento-elevated max-w-md w-full p-6 space-y-5 shadow-2xl bg-[#171720]">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">🎮 새 파티 방 만들기</h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-zinc-500 hover:text-white">
-                ✕
+          {!loading && rooms.length === 0 && (
+            <div className="room-card" style={{ minHeight: 'auto', cursor: 'default', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>개설된 공개 방이 없습니다.</p>
+              <button className="btn-secondary-sm" onClick={openCreate}>
+                지금 첫 번째 방을 만들어보세요!
               </button>
             </div>
+          )}
+        </section>
+      </div>
 
-            <form onSubmit={handleCreateRoom} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1.5">방 제목 (선택, 최대 50자)</label>
-                <input
-                  type="text"
-                  maxLength={50}
-                  placeholder="예: 다이아 랭크 즐겜팟 (미입력 시 [게임명] 파티)"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#0B0B0E] border border-[rgba(255,255,255,0.08)] rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[rgba(80,194,243,0.5)]"
-                />
-              </div>
+      {/* 방 만들기 모달 (목업 구조) */}
+      <div className={`modal-overlay ${createOpen ? 'active' : ''}`} onClick={closeCreate}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3 className="modal-title">🎮 새 파티 만들기</h3>
+            <button className="modal-close" onClick={closeCreate} aria-label="닫기">
+              &times;
+            </button>
+          </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1.5">게임명 *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="예: 롤, 발로란트, 오버워치"
-                  value={game}
-                  onChange={(e) => setGame(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#0B0B0E] border border-[rgba(255,255,255,0.08)] rounded-xl text-sm text-white focus:outline-none focus:border-[rgba(80,194,243,0.5)]"
-                />
-              </div>
+          <form id="create-room-form" onSubmit={handleCreateRoom}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="form-game">
+                게임 선택 <span className="req">*</span>
+              </label>
+              <input
+                id="form-game"
+                className="form-input"
+                list="form-game-suggestions"
+                placeholder="예: 리그 오브 레전드, Valorant, PUBG, Overwatch 2"
+                value={game}
+                onChange={(e) => setGame(e.target.value)}
+                required
+              />
+              <datalist id="form-game-suggestions">
+                {GAME_SUGGESTIONS.map((g) => (
+                  <option key={g} value={g} />
+                ))}
+              </datalist>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1.5">태그 (쉼표로 구분, 최대 5개)</label>
-                <input
-                  type="text"
-                  placeholder="예: 칼바람, 즐겜, 실버, 마이크필수"
-                  value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#0B0B0E] border border-[rgba(255,255,255,0.08)] rounded-xl text-sm text-white focus:outline-none focus:border-[rgba(80,194,243,0.5)]"
-                />
-              </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="form-title">
+                방 제목 <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>(선택, 미입력 시 [게임명] 파티)</span>
+              </label>
+              <input
+                id="form-title"
+                className="form-input"
+                maxLength={50}
+                placeholder="예: [다이아] 승급전 정글 구합니다 (보이스 필수, 즐겜)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 mb-1.5">정원 (2~6명)</label>
-                  <select
-                    value={capacity}
-                    onChange={(e) => setCapacity(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 bg-[#0B0B0E] border border-[rgba(255,255,255,0.08)] rounded-xl text-sm text-white focus:outline-none focus:border-[rgba(80,194,243,0.5)]"
-                  >
-                    {[2, 3, 4, 5, 6].map((n) => (
-                      <option key={n} value={n}>
-                        {n}명
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 mb-1.5">공개 범위</label>
-                  <select
-                    value={scope}
-                    onChange={(e) => setScope(e.target.value as RoomScope)}
-                    className="w-full px-3.5 py-2.5 bg-[#0B0B0E] border border-[rgba(255,255,255,0.08)] rounded-xl text-sm text-white focus:outline-none focus:border-[rgba(80,194,243,0.5)]"
-                  >
-                    <option value="PUBLIC">공개 (로비 노출)</option>
-                    <option value="PRIVATE">비공개 (초대코드 전용)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1.5">방 유지 유형</label>
+            <div className="form-row-2">
+              <div className="form-group">
+                <label className="form-label" htmlFor="form-capacity">
+                  최대 정원 (2~6인)
+                </label>
                 <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as RoomType)}
-                  className="w-full px-3.5 py-2.5 bg-[#0B0B0E] border border-[rgba(255,255,255,0.08)] rounded-xl text-sm text-white focus:outline-none focus:border-[rgba(80,194,243,0.5)]"
+                  id="form-capacity"
+                  className="form-select"
+                  value={capacity}
+                  onChange={(e) => setCapacity(Number(e.target.value))}
                 >
-                  <option value="TEMPORARY">휘발성 (0명 퇴장 시 자동 소멸)</option>
-                  <option value="PERMANENT">영구 방 (보존)</option>
+                  <option value="2">2명 (듀오)</option>
+                  <option value="3">3명 (트리오)</option>
+                  <option value="4">4명 (스쿼드)</option>
+                  <option value="5">5명 (팀 파티)</option>
+                  <option value="6">6명 (최대 정원)</option>
                 </select>
               </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-[#121217] hover:bg-[#0B0B0E] text-sm font-semibold text-zinc-300 border border-[rgba(255,255,255,0.08)] transition-colors"
+              <div className="form-group">
+                <label className="form-label" htmlFor="form-scope">
+                  공개 범위
+                </label>
+                <select
+                  id="form-scope"
+                  className="form-select"
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value as RoomScope)}
                 >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#10B981] to-[#50C2F3] text-sm font-bold text-black transition-colors"
-                >
-                  생성하기
-                </button>
+                  <option value="PUBLIC">공개방</option>
+                  <option value="PRIVATE">비공개 (초대코드 전용)</option>
+                </select>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 초대코드로 입장 모달 */}
-      {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bento-elevated max-w-sm w-full p-6 space-y-4 shadow-2xl bg-[#171720]">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white">🔑 초대코드로 입장</h3>
-              <button onClick={() => setShowInviteModal(false)} className="text-zinc-500 hover:text-white">
-                ✕
-              </button>
             </div>
 
-            <p className="text-xs text-zinc-400">전달받은 6자리 비공개 방 초대코드를 입력하세요.</p>
+            <div className="form-group">
+              <label className="form-label" htmlFor="form-tags">
+                태그 (쉼표로 구분, 최대 5개)
+              </label>
+              <input
+                id="form-tags"
+                className="form-input"
+                placeholder="예: 랭크, 다이아, 빡겜, 마이크필수"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+              />
+            </div>
 
-            <form onSubmit={handleJoinByInvite} className="space-y-4">
-              <div>
-                <input
-                  type="text"
-                  maxLength={6}
-                  required
-                  placeholder="예: 7K2M9X"
-                  value={inviteCodeInput}
-                  onChange={(e) => setInviteCodeInput(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-3 bg-[#0B0B0E] border border-[rgba(255,255,255,0.08)] rounded-xl text-center text-xl font-mono tracking-widest text-[#50C2F3] uppercase placeholder-zinc-600 focus:outline-none focus:border-[rgba(80,194,243,0.5)]"
-                />
+            <div className="form-group">
+              <span className="form-label">방 유형</span>
+              <div className="radio-group">
+                <label className="radio-label">
+                  <input
+                    type="radio"
+                    name="roomType"
+                    value="TEMPORARY"
+                    checked={type === 'TEMPORARY'}
+                    onChange={() => setType('TEMPORARY')}
+                  />
+                  <span>휘발성 방 (전원 퇴장 시 자동 소멸)</span>
+                </label>
+                <label className="radio-label">
+                  <input
+                    type="radio"
+                    name="roomType"
+                    value="PERMANENT"
+                    checked={type === 'PERMANENT'}
+                    onChange={() => setType('PERMANENT')}
+                  />
+                  <span>영구 방 (대화 영속화 & 방장 고아 자동 승계)</span>
+                </label>
               </div>
+            </div>
 
-              {inviteError && <p className="text-xs text-center text-[#FF371A]">{inviteError}</p>}
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowInviteModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-[#121217] hover:bg-[#0B0B0E] text-sm font-semibold text-zinc-300 border border-[rgba(255,255,255,0.08)] transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#10B981] to-[#50C2F3] text-sm font-bold text-black transition-colors"
-                >
-                  입장하기
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={closeCreate}>
+                취소
+              </button>
+              <button type="submit" className="btn-primary">
+                방 생성하고 입장하기 &rarr;
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </div>
+
+      {/* 초대코드로 입장 모달 (목업 구조) */}
+      <div className={`modal-overlay ${inviteOpen ? 'active' : ''}`} onClick={closeInvite}>
+        <div className="modal-content" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3 className="modal-title">🔑 초대코드로 입장</h3>
+            <button className="modal-close" onClick={closeInvite} aria-label="닫기">
+              &times;
+            </button>
+          </div>
+
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+            전달받은 6자리 비공개 방 초대코드를 입력하세요. (유효기간 24시간)
+          </p>
+
+          <form id="invite-join-form" onSubmit={handleJoinByInvite}>
+            <div className="form-group">
+              <input
+                className="form-input"
+                maxLength={6}
+                placeholder="예: TL-8492"
+                style={{ textTransform: 'uppercase', fontFamily: 'var(--font-mono)', letterSpacing: 2, textAlign: 'center' }}
+                value={inviteCodeInput}
+                onChange={(e) => setInviteCodeInput(e.target.value.toUpperCase())}
+                required
+              />
+            </div>
+
+            {inviteError && (
+              <p style={{ fontSize: 12, textAlign: 'center', color: 'var(--brand-primary)', marginBottom: 4 }}>{inviteError}</p>
+            )}
+
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={closeInvite}>
+                취소
+              </button>
+              <button type="submit" className="btn-primary">
+                입장하기
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   )
 }

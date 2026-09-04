@@ -22,6 +22,8 @@ export function App() {
   )
   const currentRoom = useRoomStore((state) => state.currentRoom)
   const isInVoice = useVoiceStore((state) => state.isInVoice)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showInviteModal, setShowInviteModal] = useState(false)
 
   // 세션 토큰 초기화
   useEffect(() => {
@@ -101,6 +103,24 @@ export function App() {
     syncUrl(null)
   }
 
+  // Header "+ 방 만들기" — 룸 뷰에서 클릭 시 로비로 전환 후 모달 오픈
+  const handleOpenCreateModal = () => {
+    if (activeView === 'ROOM') {
+      setActiveView('LOBBY')
+      syncUrl(null)
+    }
+    setShowCreateModal(true)
+  }
+
+  // Header "초대코드 입력" — 룸 뷰에서 클릭 시 로비로 전환 후 모달 오픈
+  const handleOpenInviteModal = () => {
+    if (activeView === 'ROOM') {
+      setActiveView('LOBBY')
+      syncUrl(null)
+    }
+    setShowInviteModal(true)
+  }
+
   const roomTitle = currentRoom?.title || currentRoom?.game || null
 
   return (
@@ -111,10 +131,18 @@ export function App() {
         roomTitle={roomTitle}
         onSwitchView={(view) => (view === 'ROOM' ? handleGotoRoom() : handleGotoLobby())}
         onExit={() => void handleExplicitExit()}
+        onCreateRoom={handleOpenCreateModal}
+        onOpenInvite={handleOpenInviteModal}
       />
 
       {activeView === 'LOBBY' ? (
-        <LobbyPage onJoinRoom={handleJoinRoom} />
+        <LobbyPage
+          onJoinRoom={handleJoinRoom}
+          showCreateModal={showCreateModal}
+          setShowCreateModal={setShowCreateModal}
+          showInviteModal={showInviteModal}
+          setShowInviteModal={setShowInviteModal}
+        />
       ) : (
         currentRoomId && (
           <RoomPage

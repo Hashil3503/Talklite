@@ -6,57 +6,58 @@ interface RoomCardProps {
   voiceCount?: number
 }
 
+/** 게임명 → 목업 badge-game 동적 클래스 매핑 (lol/val/pubg/ow) */
+function gameBadgeClass(game: string): string {
+  const g = game.toLowerCase()
+  if (g.includes('legend') || g.includes('리그') || g.includes('롤')) return 'lol'
+  if (g.includes('val') || g.includes('발로')) return 'val'
+  if (g.includes('pubg') || g.includes('배그') || g.includes('배틀')) return 'pubg'
+  if (g.includes('overwatch') || g.includes('오버워치') || g.includes('옵치')) return 'ow'
+  return ''
+}
+
 export function RoomCard({ room, onSelect, voiceCount = 0 }: RoomCardProps) {
   const title = room.title || `[${room.game}] 파티`
   return (
     <div
+      className="room-card"
+      data-room-id={room.id}
+      data-game={room.game}
       onClick={() => onSelect && onSelect(room.id)}
-      className="bento-surface bento-card-hover p-5 space-y-3 cursor-pointer group flex flex-col justify-between"
     >
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-[#50C2F3] group-hover:text-[#8B5CF6] transition-colors truncate">
-            {title}
-          </h3>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#0B0B0E] text-zinc-400 border border-[rgba(255,255,255,0.08)] shrink-0">
-            {room.count}/{room.capacity}명
-          </span>
-        </div>
+      <div className="room-card-header">
+        <span className={`badge-game ${gameBadgeClass(room.game)}`}>{room.game}</span>
+        <span className="room-capacity-badge">
+          <span className="dot-green" />
+          {room.count} / {room.capacity}명
+        </span>
+      </div>
 
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#0B0B0E] text-zinc-400 border border-[rgba(255,255,255,0.08)]">
-            {room.game}
-          </span>
-          {room.type === 'PERMANENT' && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-violet-950/40 text-[#8B5CF6] border border-violet-500/30">
-              ⭐ 영구방
-            </span>
-          )}
-        </div>
+      <h3 className="room-title">👑 {title}</h3>
 
+      <div className="room-tags">
+        {room.tags.map((tag) => (
+          <span key={tag} className="tag-pill">
+            #{tag}
+          </span>
+        ))}
         {voiceCount > 0 && (
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950/70 text-[#10B981] border border-emerald-800/60 animate-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            🎙️ 통화 중 ({voiceCount}명)
-          </div>
-        )}
-
-        {room.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {room.tags.map((tag) => (
-              <span key={tag} className="text-xs bg-[#0B0B0E] text-zinc-400 px-2 py-0.5 rounded-full border border-[rgba(255,255,255,0.06)]">
-                #{tag}
-              </span>
-            ))}
-          </div>
+          <span className="tag-pill active-voice">🎙️ 보이스 활성 ({voiceCount}명)</span>
         )}
       </div>
 
-      <div className="flex items-center justify-between pt-2 border-t border-[rgba(255,255,255,0.06)] text-xs text-zinc-500">
-        <span>
-          방장: <strong className="text-zinc-400 font-medium">{room.host}</strong>
-        </span>
-        {room.scope === 'PRIVATE' && <span className="text-amber-400 font-semibold">🔒 비공개</span>}
+      <div className="room-card-footer">
+        <div className="host-info">
+          <span className="host-crown">👑</span>
+          <span className="host-name">{room.host}</span>
+        </div>
+        {room.scope === 'PRIVATE' ? (
+          <span className="badge-scope private">🔒 비공개</span>
+        ) : room.type === 'PERMANENT' ? (
+          <span className="badge-scope permanent">영구방 ⭐</span>
+        ) : (
+          <span className="badge-scope public">공개방</span>
+        )}
       </div>
     </div>
   )
