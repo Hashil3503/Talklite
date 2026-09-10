@@ -15,6 +15,8 @@
 
 </div>
 
+> 🟢 **서비스 중** — [**https://talklite.duckdns.org**](https://talklite.duckdns.org) · 무료 상시 서버 (Oracle Cloud ARM + Caddy HTTPS)
+
 ## ⚡ TL;DR
 
 > **회원가입도, 서버 가입도, 친구 추가도 없이** — 게임명과 커스텀 해시태그로 3초 만에 파티를 찾고 바로 음성 통화를 시작하는 온디맨드 보이스 플랫폼입니다.
