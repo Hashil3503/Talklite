@@ -1,0 +1,59 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: talklite-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no
+
+  mariadb:
+    image: mariadb:11
+    container_name: talklite-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpassword
+      MARIADB_DATABASE: talklite
+      MARIADB_USER: talklite
+      MARIADB_PASSWORD: talklitepassword
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: talklite-backend
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/talklite
+      SPRING_DATASOURCE_USERNAME: talklite
+      SPRING_DATASOURCE_PASSWORD: talklitepassword
+    volumes:
+      - uploads-data:/app/uploads
+
+  frontend:
+    build: ./frontend
+    container_name: talklite-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  mariadb-data:
+  uploads-data:
+  caddy-data:
+  caddy-config:
