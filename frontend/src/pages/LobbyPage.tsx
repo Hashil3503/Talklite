@@ -32,7 +32,7 @@ export function LobbyPage({
   showInviteModal,
   setShowInviteModal,
 }: LobbyPageProps) {
-  const { rooms, loading, sort, order, setSort, setOrder, search } = useLobbyStore()
+  const { rooms, loading, sort, order, setSort, setOrder, refresh } = useLobbyStore()
   const showToast = useToastStore((state) => state.showToast)
 
   // 내부/외부(Header) 공용 모달 상태 — props 미지원 시 로컬 폴백
@@ -59,9 +59,9 @@ export function LobbyPage({
   const getCurrentUserId = () => getOrCreateAnonymousId()
 
   useEffect(() => {
-    search('', [])
+    refresh()
 
-    // 실시간 로비 갱신 구독 — ROOM_UPDATED는 증분 갱신, 그 외는 전체 재검색
+    // 실시간 로비 갱신 구독 — ROOM_UPDATED는 증분 갱신, 그 외는 현재 검색 조건으로 재검색
     const sub = subscribeTopic('/topic/lobby', (message) => {
       try {
         const raw: any = JSON.parse((message as any).body ?? '{}')
@@ -71,13 +71,13 @@ export function LobbyPage({
           return
         }
       } catch {}
-      search('', [])
+      refresh()
     })
 
     return () => {
       sub.unsubscribe()
     }
-  }, [search])
+  }, [refresh])
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault()
