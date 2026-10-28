@@ -406,6 +406,21 @@ body {
   outline: none;
   min-width: 0;
 }
+.search-field-select {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 0 10px 0 0;
+  margin-right: 10px;
+  outline: none;
+  cursor: pointer;
+}
+.search-field-select option {
+  background: var(--bg-surface);
+  color: #fff;
+}
 .btn-search {
   background: #252532;
   color: #fff;

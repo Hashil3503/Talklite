@@ -23,3 +23,16 @@ CREATE TABLE IF NOT EXISTS permanent_room_chat (
     mentions        VARCHAR(2048) NULL,
     INDEX idx_room_created (room_id, created_at)
 );
+
+CREATE TABLE IF NOT EXISTS room_creation_log (
+    id             BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    room_id        VARCHAR(36)   NOT NULL,
+    game_raw       VARCHAR(128)  NOT NULL,
+    game_canonical VARCHAR(128)  NOT NULL,
+    title          VARCHAR(128)  NULL,
+    tags           VARCHAR(512)  NOT NULL DEFAULT '',
+    scope          VARCHAR(16)   NOT NULL,
+    type           VARCHAR(16)   NOT NULL,
+    created_at     BIGINT        NOT NULL,
+    INDEX idx_game_canonical (game_canonical)
+);

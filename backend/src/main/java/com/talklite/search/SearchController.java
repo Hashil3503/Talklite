@@ -22,8 +22,10 @@ public class SearchController {
     public List<RoomResponse> search(
             @RequestParam(required = false) String game,
             @RequestParam(required = false) String tags,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false, defaultValue = "all") String field,
             @RequestParam(required = false, defaultValue = "latest") String sort,
             @RequestParam(required = false, defaultValue = "desc") String order) {
-        return searchService.search(game, tags, sort, order);
+        return searchService.search(game, tags, q, field, sort, order);
     }
 }

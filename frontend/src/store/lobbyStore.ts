@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { searchRooms, type RoomResponse } from '../lib/api'
+import { searchRooms, type RoomResponse, type SearchField } from '../lib/api'
 
 export type SortKey = 'latest' | 'title' | 'members'
 export type SortOrder = 'asc' | 'desc'
@@ -8,14 +8,16 @@ interface LobbyState {
   game: string
   tags: string[]
   preset: string
+  field: SearchField
   sort: SortKey
   order: SortOrder
   rooms: RoomResponse[]
   loading: boolean
   error: string | null
-  search: (game: string, tags: string[], sort?: SortKey, order?: SortOrder) => Promise<void>
+  search: (game: string, tags: string[], sort?: SortKey, order?: SortOrder, q?: string, field?: SearchField) => Promise<void>
   setGame: (game: string) => void
   setPreset: (preset: string) => void
+  setField: (field: SearchField) => void
   setSort: (sort: SortKey) => void
   setOrder: (order: SortOrder) => void
   toggleTag: (tag: string) => void
@@ -26,6 +28,7 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
   game: '',
   tags: [],
   preset: '',
+  field: 'all',
   sort: 'latest',
   order: 'desc',
   rooms: [],
@@ -33,16 +36,17 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
   error: null,
   setGame: (game) => set({ game }),
   setPreset: (preset) => set({ preset }),
+  setField: (field) => set({ field }),
   setSort: (sort) => set({ sort }),
   setOrder: (order) => set({ order }),
   toggleTag: (tag) => {
     const tags = get().tags
     set({ tags: tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag] })
   },
-  search: async (game, tags, sort = 'latest', order = 'desc') => {
+  search: async (game, tags, sort = 'latest', order = 'desc', q, field) => {
     set({ loading: true, error: null })
     try {
-      const rooms = await searchRooms({ game: game || undefined, tags: tags.length ? tags.join(',') : undefined, sort, order })
+      const rooms = await searchRooms({ game: game || undefined, tags: tags.length ? tags.join(',') : undefined, q: q || undefined, field, sort, order })
       set({ rooms, loading: false })
     } catch {
       // 서버 최초 기동/일시적 네트워크 지연 시에도 자연스러운 "개설된 공개 방이 없습니다" 안내를 위해 무음 처리

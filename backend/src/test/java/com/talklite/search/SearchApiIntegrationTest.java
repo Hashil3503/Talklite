@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -46,6 +47,9 @@ public class SearchApiIntegrationTest extends IntegrationTestCleanup {
     @Autowired
     private RoomMapper roomMapper;
 
+    @Autowired
+    private JdbcClient jdbc;
+
     private RoomResponse createRoom(String game, List<String> tags, RoomScope scope) throws Exception {
         String content = mockMvc.perform(post("/api/rooms")
                         .header("Authorization", tokenFor("user-host"))
@@ -59,13 +63,19 @@ public class SearchApiIntegrationTest extends IntegrationTestCleanup {
     }
 
     private List<RoomResponse> search(String game, String tags) throws Exception {
-        return search(game, tags, null, null);
+        return search(game, tags, null, null, null, null);
     }
 
     private List<RoomResponse> search(String game, String tags, String sort, String order) throws Exception {
+        return search(game, tags, null, null, sort, order);
+    }
+
+    private List<RoomResponse> search(String game, String tags, String q, String field, String sort, String order) throws Exception {
         var request = get("/api/search");
         if (game != null) request = request.param("game", game);
         if (tags != null) request = request.param("tags", tags);
+        if (q != null) request = request.param("q", q);
+        if (field != null) request = request.param("field", field);
         if (sort != null) request = request.param("sort", sort);
         if (order != null) request = request.param("order", order);
         String content = mockMvc.perform(request)
@@ -266,5 +276,70 @@ public class SearchApiIntegrationTest extends IntegrationTestCleanup {
         List<RoomResponse> result = search("SortNullMixed", "", "title", "asc");
         // null → "" 이므로 사전순 선두
         assertEquals(List.of("", "Alpha", "Bravo"), orderedTitles(result));
+    }
+
+    @Test
+    @DisplayName("부분 일치: 게임명 prefix 및 공백 무시 매칭")
+    void partialGameMatchIgnoresWhitespace() throws Exception {
+        RoomResponse room = createRoom("리그 오브 레전드", List.of("pm-a"), RoomScope.PUBLIC);
+
+        assertTrue(ids(search(null, null, "리그", null, null, null)).contains(room.id()));
+        assertTrue(ids(search(null, null, "리그오브", null, null, null)).contains(room.id()));
+    }
+
+    @Test
+    @DisplayName("별칭: 배그/발로란트 별칭으로 검색 및 프리셋 필터 매칭")
+    void aliasMatch() throws Exception {
+        RoomResponse pubg = createRoom("배틀그라운드", List.of("al-a"), RoomScope.PUBLIC);
+        RoomResponse valorant = createRoom("Valorant", List.of("al-b"), RoomScope.PUBLIC);
+
+        assertTrue(ids(search(null, null, "배그", null, null, null)).contains(pubg.id()));
+        assertTrue(ids(search("발로란트", "", null, null, null, null)).contains(valorant.id()));
+        assertTrue(ids(search(null, null, "발로란트", null, null, null)).contains(valorant.id()));
+    }
+
+    @Test
+    @DisplayName("field 필터: title/game/tag 범위별 매칭")
+    void fieldFilter() throws Exception {
+        RoomResponse a = createRoomWithTitle("즐겜 파티", "GameFieldX", List.of("mic-on"));
+        RoomResponse b = createRoomWithTitle("B방", "즐겜world", List.of());
+
+        List<RoomResponse> titleOnly = search(null, null, "즐겜", "title", null, null);
+        assertTrue(ids(titleOnly).contains(a.id()));
+        assertFalse(ids(titleOnly).contains(b.id()));
+
+        List<RoomResponse> gameOnly = search(null, null, "즐겜", "game", null, null);
+        assertTrue(ids(gameOnly).contains(b.id()));
+        assertFalse(ids(gameOnly).contains(a.id()));
+
+        List<RoomResponse> all = search(null, null, "즐겜", "all", null, null);
+        assertTrue(ids(all).containsAll(List.of(a.id(), b.id())));
+
+        List<RoomResponse> tagOnly = search(null, null, "mic", "tag", null, null);
+        assertTrue(ids(tagOnly).contains(a.id()));
+        assertFalse(ids(tagOnly).contains(b.id()));
+    }
+
+    @Test
+    @DisplayName("화이트리스트 위반 field는 q 없이도 400 invalid_field")
+    void invalidFieldReturns400() throws Exception {
+        mockMvc.perform(get("/api/search").param("field", "foo"))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.error").value("invalid_field"));
+    }
+
+    @Test
+    @DisplayName("방 생성 로그: game_raw/game_canonical 기록")
+    void roomCreationLogRecordsCanonicalGame() throws Exception {
+        RoomResponse room = createRoom("Valorant", List.of("log-tag"), RoomScope.PUBLIC);
+
+        List<String> row = jdbc.sql(
+                        "SELECT game_raw, game_canonical FROM room_creation_log WHERE room_id = ?")
+                .param(room.id())
+                .query((rs, rowNum) -> List.of(rs.getString("game_raw"), rs.getString("game_canonical")))
+                .single();
+
+        assertEquals("Valorant", row.get(0));
+        assertEquals("발로란트", row.get(1));
     }
 }
