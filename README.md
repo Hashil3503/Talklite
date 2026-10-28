@@ -10,7 +10,7 @@
 ![MariaDB](https://img.shields.io/badge/MariaDB-11-003545?style=for-the-badge&logo=mariadb&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![WebRTC](https://img.shields.io/badge/WebRTC-P2P_Mesh-333333?style=for-the-badge&logo=webrtc&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-67%2F67_ALL_PASS-success?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-72%2F72_ALL_PASS-success?style=for-the-badge)
 ![Lint](https://img.shields.io/badge/Lint-0_error-green?style=for-the-badge)
 
 </div>
@@ -36,7 +36,7 @@
 Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & 오픈 보이스 플랫폼**입니다:
 
 - **익명 UUID 기반 즉시 참여** — 회원가입 없이 브라우저만으로 파티 생성/입장, 커스텀 닉네임 설정
-- **5종 게임 프리셋 & 해시태그 교집합 검색** — 인기 게임 원클릭 탭 + 300ms 디바운스 실시간 검색 + 3×2 복합 정렬
+- **5종 게임 프리셋 & 부분일치 검색** — 인기 게임 원클릭 탭 + 게임명·제목·태그 부분일치(검색 범위 선택) + 약칭·영문 별칭(롤·배그·Valorant 등) 인식 + 300ms 디바운스 + 3×2 복합 정렬
 - **Opt-in 음성 통화** — 원할 때만 마이크를 켜는 1:N 그룹 보이스 (최대 6인), 로비에서도 통화 유지
 - **정밀 오디오 엔진 & 고급 음성 UX** — 200% 증폭·피크 컴프레서, 20단계 VU 미터, PTT, 온디바이스 AI 잡음 제거, 독립 출력 장치(`setSinkId`)
 - **인터랙티브 채팅 시스템** — 서버 확정 @멘션·무에셋 핑, 클립보드 WebP 이미지 업로드 & 라이트박스
@@ -110,9 +110,11 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 정원 경쟁(Race Condition)은 분산 환경의 고전적 문제입니다. Talklite는 입장(`join.lua`)·음성 입장(`voice_join.lua`)·파괴 GC(`gc.lua`)·강제 삭제(`destroy.lua`)·방 수정 재색인(`update_room.lua`) 5종 Lua Script로 **조건 검사와 상태 변경을 Redis 단일 스레드 안에서 원자 처리**합니다.
 → 검증: 500개 병렬 Join 요청에서 정확히 정원 수만큼만 성공, 나머지 전부 409 반환 (`PerformanceLatencyIntegrationTest`)
 
-### 2️⃣ Ultra-fast Search: SINTER 역색인 + 3×2 복합 정렬
-- 태그·게임명을 Redis Set 역색인(`tag:{tag}:rooms`, `game:{game}:rooms`)으로 관리하고, 다중 조건 검색은 `SINTER` 교집합 한 번으로 해결합니다.
-- 모든 키는 `trim().toLowerCase()` 정규화로 색인 일관성 보장 (한글 게임명 정식 명칭 단일 소스 — `lib/gamePresets.ts`).
+### 2️⃣ Search: 부분일치 + 게임 별칭 + 3×2 복합 정렬
+- **부분일치 검색**: 검색어(`q`)를 대소문자·공백 무시로 게임명·제목·태그에 부분일치 비교하고, 검색 범위(`field` = 전체/게임명/제목/태그)를 선택할 수 있습니다. (`리그오브` → 리그 오브 레전드)
+- **게임 별칭 매핑** (`GameAliases`): `롤`·`lol`, `배그`·`pubg`, `옵치`·`ow2`, `valorant` 등을 정식 명칭으로 정규화해, 영문으로 만든 방도 한글 프리셋 탭에 노출되고 약칭으로도 검색됩니다. 프리셋 탭은 별칭 반영 정확일치.
+- **태그 필터**는 Redis Set 역색인(`tag:{tag}:rooms`) `SINTER` 교집합으로 처리합니다. 게임명·검색어 조건은 부분일치를 위해 공개 방을 메모리에서 비교합니다(현재 규모 기준 설계, 대규모 시 인덱스 보강 예정).
+- **방 생성 이력** (`room_creation_log`): 입력 게임명 원문과 정규화 결과를 수집해 신규 별칭 발굴에 활용 (이용자 식별 정보 미저장).
 - **3×2 복합 정렬**: `latest` / `title` / `members` × `asc` / `desc`, 기본값 `latest/desc`, 화이트리스트 검증(400), Null-Safe 대소문자 무시 사전순 + 조건부 2차 키.
 - 방 수정 시 `update_room.lua`가 `oldGame`/`oldTags`를 원자적으로 `SREM`/`SADD` 재색인하여 검색 상태 실시간 동기화.
 
@@ -189,7 +191,7 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 
 ## 💡 Technical Decisions (기술적 선택과 이유)
 
-- **Realtime Store: Redis 7 (Hash/Set/ZSet + Lua)** — 방 메타는 Hash, 멤버는 Set, 체류시간은 ZSet, 검색은 Set 역색인으로 모델링. `SINTER`로 다중 태그 교집합을 O(N) 탐색 없이 처리하고, `join / voice_join / gc / destroy / update_room` 5종 Lua 스크립트로 애플리케이션 락 없이 500 병렬 요청에서도 정원 초과 0건 보장.
+- **Realtime Store: Redis 7 (Hash/Set/ZSet + Lua)** — 방 메타는 Hash, 멤버는 Set, 체류시간은 ZSet, 태그 검색은 Set 역색인으로 모델링. `SINTER`로 다중 태그 교집합을 O(N) 탐색 없이 처리하고(게임명·검색어 부분일치는 메모리 비교), `join / voice_join / gc / destroy / update_room` 5종 Lua 스크립트로 애플리케이션 락 없이 500 병렬 요청에서도 정원 초과 0건 보장.
 - **Realtime Transport: STOMP over WebSocket + Redis Pub/Sub Relay-Only** — Spring STOMP Simple Broker만으로는 멀티 인스턴스 브로드캐스트가 불가능해, 발행은 `RedisMessagePublisher` 단일 경로, 구독은 `RedisMessageSubscriber`가 STOMP로 중계하는 구조. 이중 발송/로컬 누수 버그를 아키텍처 레벨에서 차단.
 - **Frontend State: Zustand vs Redux** — 보이스 세션(WebRTC Manager, AudioContext, VoiceAudioEngine)처럼 React 외부 라이프사이클을 갖는 객체를 전역 관리하기 위해 보일러플레이트가 적고 외부 스토어 구독이 자유로운 Zustand(5.x)를 선택.
 - **Voice: WebRTC P2P Mesh + Web Audio Engine vs SFU** — 6인 이하 소규모 파티 타깃이라 서버 미디어 릴레이가 불필요한 Mesh가 비용·지연·구현 복잡도에서 유리. Perfect Negotiation으로 Offer/Answer 충돌 해결.
@@ -200,10 +202,10 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 
 ## 🧪 Test & Quality (테스트 및 품질)
 
-Redis DB 격리 + 자동 Teardown 환경에서 **67개 통합 테스트 100% ALL PASS**, 프론트엔드 린트 0 error·빌드 무결성을 유지합니다.
+Redis DB 격리 + 자동 Teardown 환경에서 **72개 통합 테스트 100% ALL PASS**, 프론트엔드 린트 0 error·빌드 무결성을 유지합니다.
 
 ```bash
-# 백엔드 전체 회귀 테스트 (67/67 ALL PASS)
+# 백엔드 전체 회귀 테스트 (72/72 ALL PASS)
 cd backend && .\mvnw.cmd test
 
 # 프론트엔드 린트 & 빌드 (0 error)
@@ -226,9 +228,9 @@ cd frontend && npm run lint && npm run build
 | `RoomUpdateIntegrationTest` | 4 | PATCH 수정, 비방장 403, 정원 축소 409, 태그 SREM/SADD 원자 재색인 | ✅ PASS |
 | `ComprehensiveAuditIntegrationTest` | 10 | 종합 결함 전수 (인증 401/403, 정원 409, 원자 재색인, 멘션/이메일 오탐 방어) | ✅ PASS |
 | `PerformanceLatencyIntegrationTest` | 1 | 500 병렬 원자 정원 가드 + 평균 지연 ≤ 200ms | ✅ PASS |
-| `SearchApiIntegrationTest` | 14 | SINTER 검색, 3×2 복합 정렬, 대소문자 정규화, 위반 400, title null 혼합 | ✅ PASS |
+| `SearchApiIntegrationTest` | 19 | 태그 SINTER·부분일치·게임 별칭·검색 범위 필터, 3×2 복합 정렬, 대소문자 정규화, 위반 400, title null 혼합, 방 생성 이력 | ✅ PASS |
 | `ChatRealtimeIntegrationTest` | 2 | STOMP 채팅 실시간 브로드캐스트 및 clientRequestId 에코 | ✅ PASS |
-| **합계** | **67** | **T-01~T-11 전체 시나리오, DEF-01~09, Phase 8~14 전수 검증** | **ALL PASS** |
+| **합계** | **72** | **T-01~T-11 전체 시나리오, DEF-01~09, Phase 8~15 전수 검증** | **ALL PASS** |
 
 ---
 
@@ -267,7 +269,7 @@ Talklite/
 │       ├── config/                      # WebSocket STOMP, Redis Lua, Static Resource
 │       ├── realtime/                    # Redis Pub/Sub Relay-Only 브로드캐스트
 │       ├── room/                        # 방 도메인, title 계약, PATCH 수정, 영속화
-│       ├── search/                      # SINTER 검색 + 3×2 복합 정렬 엔진
+│       ├── search/                      # 부분일치·별칭 검색 + 3×2 복합 정렬 엔진
 │       ├── signaling/                   # WebRTC 시그널링 (Offer/Answer/ICE)
 │       └── voice/                       # 6인 음성 원자 가드 & 발화 상태
 ├── frontend/                            # React 19 + TypeScript + Vite
