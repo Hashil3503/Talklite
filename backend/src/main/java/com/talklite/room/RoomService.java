@@ -2,6 +2,8 @@ package com.talklite.room;
 
 import com.talklite.chat.PermanentRoomChatRepository;
 import com.talklite.realtime.RoomEventPublisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -22,6 +24,8 @@ import static com.talklite.realtime.RoomEventPublisher.ROOM_EVENT_UPDATED;
 @Service
 public class RoomService {
 
+    private static final Logger log = LoggerFactory.getLogger(RoomService.class);
+
     private final StringRedisTemplate redis;
     private final RoomMapper roomMapper;
     private final DefaultRedisScript<Long> joinScript;
@@ -29,6 +33,7 @@ public class RoomService {
     private final RoomEventPublisher eventPublisher;
     private final PermanentRoomRepository permanentRoomRepository;
     private final PermanentRoomChatRepository permanentRoomChatRepository;
+    private final RoomCreationLogRepository roomCreationLogRepository;
 
     public RoomService(StringRedisTemplate redis,
                    RoomMapper roomMapper,
@@ -36,7 +41,8 @@ public class RoomService {
                    @Qualifier("updateScript") DefaultRedisScript<Long> updateScript,
                    RoomEventPublisher eventPublisher,
                    PermanentRoomRepository permanentRoomRepository,
-                   PermanentRoomChatRepository permanentRoomChatRepository) {
+                   PermanentRoomChatRepository permanentRoomChatRepository,
+                   RoomCreationLogRepository roomCreationLogRepository) {
         this.redis = redis;
         this.roomMapper = roomMapper;
         this.joinScript = joinScript;
@@ -44,6 +50,7 @@ public class RoomService {
         this.eventPublisher = eventPublisher;
         this.permanentRoomRepository = permanentRoomRepository;
         this.permanentRoomChatRepository = permanentRoomChatRepository;
+        this.roomCreationLogRepository = roomCreationLogRepository;
     }
 
 
@@ -66,6 +73,12 @@ public class RoomService {
         roomMapper.save(room);
         if (request.type() == RoomType.PERMANENT) {
             permanentRoomRepository.upsert(room);
+        }
+        try {
+            roomCreationLogRepository.insert(room);
+        } catch (RuntimeException e) {
+            // 로그 실패가 방 생성을 막지 않도록 무음 경고 처리
+            log.warn("room creation log insert failed: roomId={}", room.id(), e);
         }
         eventPublisher.publishLobby(LOBBY_ROOM_UPDATE, room);
         return get(room.id());

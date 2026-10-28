@@ -15,9 +15,13 @@ export interface RoomResponse {
   members: string[]
 }
 
+export type SearchField = 'all' | 'game' | 'title' | 'tag'
+
 export interface SearchParams {
   game?: string
   tags?: string
+  q?: string
+  field?: SearchField
   sort?: 'latest' | 'title' | 'members'
   order?: 'asc' | 'desc'
 }
@@ -183,6 +187,10 @@ export async function searchRooms(params: SearchParams = {}): Promise<RoomRespon
   const query = new URLSearchParams()
   if (params.game) query.set('game', params.game)
   if (params.tags) query.set('tags', params.tags)
+  if (params.q) {
+    query.set('q', params.q)
+    if (params.field) query.set('field', params.field)
+  }
   if (params.sort) query.set('sort', params.sort)
   if (params.order) query.set('order', params.order)
   const qs = query.toString()

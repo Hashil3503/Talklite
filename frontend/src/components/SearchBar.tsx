@@ -2,38 +2,30 @@ import { useEffect, useState } from 'react'
 import { useDebounce } from '../lib/debounce'
 import { GAME_PRESETS } from '../lib/gamePresets'
 import { useLobbyStore } from '../store/lobbyStore'
+import type { SearchField } from '../lib/api'
 
-function resolveQuery(preset: string, query: string, tags: string[]) {
-  if (preset) {
-    const trimmed = query.trim()
-    return { game: preset, tags: trimmed ? [trimmed] : tags }
-  }
-  return { game: query.trim(), tags }
+const FIELD_PLACEHOLDERS: Record<SearchField, string> = {
+  all: '게임명·제목·태그 검색 (300ms 디바운스)...',
+  game: '게임명 검색 (300ms 디바운스)...',
+  title: '제목 검색 (300ms 디바운스)...',
+  tag: '태그 검색 (300ms 디바운스)...',
 }
 
 export function SearchBar() {
-  const { game, tags, preset, sort, order, setGame, setPreset, search } = useLobbyStore()
+  const { game, tags, preset, field, sort, order, setGame, setPreset, setField, search } = useLobbyStore()
   const [gameInput, setGameInput] = useState(game)
   const debouncedQuery = useDebounce(gameInput, 300)
 
-  // 300ms 디바운스 자동 검색 (프리셋 탭과 텍스트 쿼리 AND 결합)
+  // 300ms 디바운스 자동 검색 (프리셋은 game 필터, 입력은 q 파라미터)
   useEffect(() => {
-    const { game: g, tags: t } = resolveQuery(preset, debouncedQuery, tags)
-    search(g, t, sort, order)
-  }, [debouncedQuery, tags, preset, sort, order, search])
+    search(preset, tags, sort, order, debouncedQuery.trim(), field)
+  }, [debouncedQuery, tags, preset, field, sort, order, search])
 
   // 수동 검색 제출 (Enter / [검색] 버튼)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const { game: g, tags: t } = resolveQuery(preset, gameInput, tags)
-    search(g, t, sort, order)
+    search(preset, tags, sort, order, gameInput.trim(), field)
   }
-
-  const inputPlaceholder = preset
-    ? '태그 검색 — 프리셋 선택 시 태그로 매칭 (300ms 디바운스)...'
-    : '게임명 또는 태그 검색 (300ms 디바운스)...'
-
-  const inputAriaLabel = preset ? '태그 검색' : '게임명 또는 태그 검색'
 
   return (
     <div className="search-container">
@@ -41,11 +33,22 @@ export function SearchBar() {
         <span className="search-icon" aria-hidden="true">
           🔍
         </span>
+        <select
+          className="search-field-select"
+          aria-label="검색 범위"
+          value={field}
+          onChange={(e) => setField(e.target.value as SearchField)}
+        >
+          <option value="all">전체</option>
+          <option value="game">게임명</option>
+          <option value="title">제목</option>
+          <option value="tag">태그</option>
+        </select>
         <input
           type="text"
           className="search-input"
-          placeholder={inputPlaceholder}
-          aria-label={inputAriaLabel}
+          placeholder={FIELD_PLACEHOLDERS[field]}
+          aria-label="검색어"
           value={gameInput}
           onChange={(e) => {
             setGameInput(e.target.value)

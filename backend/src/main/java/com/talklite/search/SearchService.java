@@ -1,5 +1,6 @@
 package com.talklite.search;
 
+import com.talklite.room.GameAliases;
 import com.talklite.room.Room;
 import com.talklite.room.RoomMapper;
 import com.talklite.room.RoomResponse;
@@ -34,17 +35,22 @@ public class SearchService {
     }
 
     /** P0-05: 3x2 복합 정렬 검색 엔진. sort=latest|title|members, order=asc|desc, 기본값 latest/desc */
-    public List<RoomResponse> search(String game, String tags, String sort, String order) {
+    public List<RoomResponse> search(String game, String tags, String q, String field, String sort, String order) {
         String sortKey = normalizeSort(sort);
         boolean desc = normalizeOrder(order);
+        String fieldKey = normalizeField(field);
+        String qn = GameAliases.normalize(q);
+        String qc = GameAliases.canonical(q);
 
         List<String> tagList = parseTags(tags);
-        Set<String> roomIds = candidateRoomIds(game, tagList);
+        Set<String> roomIds = candidateRoomIds(tagList);
 
         List<Room> rooms = roomIds.stream()
                 .map(roomMapper::find)
                 .filter(Objects::nonNull)
                 .filter(room -> room.scope() == RoomScope.PUBLIC)
+                .filter(room -> isBlank(game) || GameAliases.canonical(room.game()).equals(GameAliases.canonical(game)))
+                .filter(room -> isBlank(q) || matchesQuery(room, qn, qc, fieldKey))
                 .toList();
 
         // 멤버 목록을 1회 조회 후 재사용 (N+1 완화, 정렬 키 + 응답 공용)
@@ -95,15 +101,35 @@ public class SearchService {
         return normalized.equals("desc");
     }
 
-    private Set<String> candidateRoomIds(String game, List<String> tagList) {
-        List<String> keys = new ArrayList<>();
-        tagList.forEach(tag -> keys.add(roomMapper.tagIndexKey(tag)));
-        if (!isBlank(game)) {
-            keys.add(roomMapper.gameIndexKey(game.trim()));
+    /** 화이트리스트: all|game|title|tag (대소문자 무시), 위반 시 400 invalid_field. 기본값 all */
+    private String normalizeField(String field) {
+        String normalized = field == null ? "all" : field.trim().toLowerCase();
+        if (!normalized.equals("all") && !normalized.equals("game")
+                && !normalized.equals("title") && !normalized.equals("tag")) {
+            throw new InvalidSearchParamException("invalid_field", "field must be all|game|title|tag");
         }
-        if (keys.isEmpty()) {
+        return normalized;
+    }
+
+    private boolean matchesQuery(Room room, String qn, String qc, String field) {
+        boolean gameMatch = GameAliases.canonical(room.game()).contains(qc)
+                || GameAliases.normalize(room.game()).contains(qn);
+        boolean titleMatch = room.title() != null && GameAliases.normalize(room.title()).contains(qn);
+        boolean tagMatch = room.tags().stream().anyMatch(tag -> GameAliases.normalize(tag).contains(qn));
+        return switch (field) {
+            case "game" -> gameMatch;
+            case "title" -> titleMatch;
+            case "tag" -> tagMatch;
+            default -> gameMatch || titleMatch || tagMatch;
+        };
+    }
+
+    private Set<String> candidateRoomIds(List<String> tagList) {
+        if (tagList.isEmpty()) {
             return allRoomIds();
         }
+        List<String> keys = new ArrayList<>();
+        tagList.forEach(tag -> keys.add(roomMapper.tagIndexKey(tag)));
         Set<String> intersect = redis.opsForSet().intersect(keys);
         return intersect == null ? Set.of() : intersect;
     }
