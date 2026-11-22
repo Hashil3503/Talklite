@@ -271,9 +271,3 @@ Talklite/
 ├── docker-compose.yml                   # Redis 7 & MariaDB 11 오케스트레이션
 └── start.bat / stop.bat                 # 원클릭 기동/종료 스크립트
 ```
-
----
-
-<div align="center">
-  <sub>Solo-built with ❤️ — Talklite</sub>
-</div>
