@@ -1,20 +1,5 @@
 # 🎙️ Talklite — 온디맨드 게이머 파티 매칭 & 오픈 보이스 플랫폼
 
-<div align="center">
-
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5-6DB33F?style=for-the-badge&logo=spring-boot&logoColor=white)
-![Java](https://img.shields.io/badge/Java-21-f89820?style=for-the-badge&logo=openjdk&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)
-![MariaDB](https://img.shields.io/badge/MariaDB-11-003545?style=for-the-badge&logo=mariadb&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![WebRTC](https://img.shields.io/badge/WebRTC-P2P_Mesh-333333?style=for-the-badge&logo=webrtc&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-72%2F72_ALL_PASS-success?style=for-the-badge)
-![Lint](https://img.shields.io/badge/Lint-0_error-green?style=for-the-badge)
-
-</div>
-
 > 🟢 **서비스 중** — [**https://talklite.duckdns.org**](https://talklite.duckdns.org) · 무료 상시 서버 (Oracle Cloud ARM + Caddy HTTPS)
 
 ## ⚡ TL;DR
@@ -168,24 +153,27 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 
 ## 🛠️ Tech Stack (기술 스택)
 
-### Frontend
-| 분야 | 기술 | 버전 | 설명 |
-| :--- | :--- | :---: | :--- |
-| **Framework** | React · TypeScript · Vite | 19.x / 5.x / 7.x | 반응형 SPA 프레임워크 & 빌드 |
-| **State** | Zustand | 5.x | 전역 상태 (`roomStore`, `voiceStore`, `lobbyStore`, `userStore`, `toastStore`) |
-| **Styling** | TailwindCSS 4 | 4.x | 딥다크 Bento 디자인 시스템 + 목업 CSS |
-| **Virtualization** | TanStack Virtual | 3.x | 채팅 리스트 가상화 |
-| **Realtime** | STOMP.js | 7.x | STOMP over WebSocket 싱글턴 |
-| **Media & Audio** | WebRTC · Web Audio API | Browser Native | P2P Mesh 음성, 200% 증폭 & 컴프레서, VU 미터, AI 잡음 제거, `setSinkId` |
+<div align="center">
 
-### Backend & Infra
-| 분야 | 기술 | 버전 | 설명 |
-| :--- | :--- | :---: | :--- |
-| **Framework** | Spring Boot · Java (LTS) | 3.5.x / 21 | REST API & STOMP 메시지 브로커 |
-| **Realtime** | Spring WebSocket (STOMP) · Spring Data Redis | Boot 3.5 | Relay-Only Pub/Sub 브로드캐스트 |
-| **Store** | Redis | 7.x | SINTER 역색인, 5종 Lua 원자 스크립트, Pub/Sub |
-| **Database** | MariaDB | 11.x | 영구 방 메타데이터 & 채팅 기록 영속화 |
-| **Infra** | Docker Compose | Standard | Redis 7 & MariaDB 11 통합 컨테이너 |
+![React](https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+![Zustand](https://img.shields.io/badge/Zustand-443E38?style=for-the-badge)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![WebRTC](https://img.shields.io/badge/WebRTC-333333?style=for-the-badge&logo=webrtc&logoColor=white)
+<br />
+![Java](https://img.shields.io/badge/Java-f89820?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)
+![MariaDB](https://img.shields.io/badge/MariaDB-003545?style=for-the-badge&logo=mariadb&logoColor=white)
+<br />
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Oracle Cloud](https://img.shields.io/badge/Oracle_Cloud-F80000?style=for-the-badge)
+![Caddy](https://img.shields.io/badge/Caddy-1F88C0?style=for-the-badge&logo=caddy&logoColor=white)
+![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
+![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)
+
+</div>
 
 ---
 
