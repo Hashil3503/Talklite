@@ -2,6 +2,32 @@
 
 > 🟢 **서비스 중** — [**https://talklite.duckdns.org**](https://talklite.duckdns.org) · 무료 상시 서버 (Oracle Cloud ARM + Caddy HTTPS)
 
+## 🛠️ Tech Stack (기술 스택)
+
+<div align="center">
+
+![React](https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+![Zustand](https://img.shields.io/badge/Zustand-443E38?style=for-the-badge)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![WebRTC](https://img.shields.io/badge/WebRTC-333333?style=for-the-badge&logo=webrtc&logoColor=white)
+<br />
+![Java](https://img.shields.io/badge/Java-f89820?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)
+![MariaDB](https://img.shields.io/badge/MariaDB-003545?style=for-the-badge&logo=mariadb&logoColor=white)
+<br />
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Oracle Cloud](https://img.shields.io/badge/Oracle_Cloud-F80000?style=for-the-badge)
+![Caddy](https://img.shields.io/badge/Caddy-1F88C0?style=for-the-badge&logo=caddy&logoColor=white)
+![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
+![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)
+
+</div>
+
+---
+
 ## 📌 Overview (프로젝트 개요)
 
 게임을 하다 보면 "지금 당장 같이 할 사람"이 필요하지만, 기존 디스코드·커뮤니티 방식은 **서버 가입 → 채널 탐색 → 초대 대기**라는 마찰이 큽니다.
@@ -136,32 +162,6 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 ```
 
 **Relay-Only 규약**: 모든 실시간 이벤트는 Redis Pub/Sub 채널로만 발행되고, STOMP 브로드캐스트는 `RedisMessageSubscriber`가 단독 수행합니다. 단일 경로 설계로 이중 발송/로컬 브로드캐스트 누수 버그를 구조적으로 차단했습니다.
-
----
-
-## 🛠️ Tech Stack (기술 스택)
-
-<div align="center">
-
-![React](https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
-![Zustand](https://img.shields.io/badge/Zustand-443E38?style=for-the-badge)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
-![WebRTC](https://img.shields.io/badge/WebRTC-333333?style=for-the-badge&logo=webrtc&logoColor=white)
-<br />
-![Java](https://img.shields.io/badge/Java-f89820?style=for-the-badge&logo=openjdk&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)
-![MariaDB](https://img.shields.io/badge/MariaDB-003545?style=for-the-badge&logo=mariadb&logoColor=white)
-<br />
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Oracle Cloud](https://img.shields.io/badge/Oracle_Cloud-F80000?style=for-the-badge)
-![Caddy](https://img.shields.io/badge/Caddy-1F88C0?style=for-the-badge&logo=caddy&logoColor=white)
-![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
-![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)
-
-</div>
 
 ---
 
