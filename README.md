@@ -244,7 +244,7 @@ Talklite/
 │       ├── lib/                         # webrtc, voiceAudioEngine, audioDetector, gamePresets, stomp, api
 │       ├── store/                       # Zustand (roomStore, voiceStore, lobbyStore, userStore, toastStore)
 │       └── pages/                       # LobbyPage, RoomPage
-├── docs/                                # 업무지침서, 인수인계서, UI 레퍼런스 & 스크린샷
+├── docs/                                # README 스크린샷 (docs/images)
 ├── docker-compose.yml                   # Redis 7 & MariaDB 11 오케스트레이션
 └── start.bat / stop.bat                 # 원클릭 기동/종료 스크립트
 ```
