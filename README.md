@@ -177,17 +177,6 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 
 ---
 
-## 💡 Technical Decisions (기술적 선택과 이유)
-
-- **Realtime Store: Redis 7 (Hash/Set/ZSet + Lua)** — 방 메타는 Hash, 멤버는 Set, 체류시간은 ZSet, 태그 검색은 Set 역색인으로 모델링. `SINTER`로 다중 태그 교집합을 O(N) 탐색 없이 처리하고(게임명·검색어 부분일치는 메모리 비교), `join / voice_join / gc / destroy / update_room` 5종 Lua 스크립트로 애플리케이션 락 없이 500 병렬 요청에서도 정원 초과 0건 보장.
-- **Realtime Transport: STOMP over WebSocket + Redis Pub/Sub Relay-Only** — Spring STOMP Simple Broker만으로는 멀티 인스턴스 브로드캐스트가 불가능해, 발행은 `RedisMessagePublisher` 단일 경로, 구독은 `RedisMessageSubscriber`가 STOMP로 중계하는 구조. 이중 발송/로컬 누수 버그를 아키텍처 레벨에서 차단.
-- **Frontend State: Zustand vs Redux** — 보이스 세션(WebRTC Manager, AudioContext, VoiceAudioEngine)처럼 React 외부 라이프사이클을 갖는 객체를 전역 관리하기 위해 보일러플레이트가 적고 외부 스토어 구독이 자유로운 Zustand(5.x)를 선택.
-- **Voice: WebRTC P2P Mesh + Web Audio Engine vs SFU** — 6인 이하 소규모 파티 타깃이라 서버 미디어 릴레이가 불필요한 Mesh가 비용·지연·구현 복잡도에서 유리. Perfect Negotiation으로 Offer/Answer 충돌 해결.
-- **Persistent Session (vs 화면별 마운트)** — WebRTC/STOMP는 React 생명주기와 무관한 외부 리소스이므로 `App.tsx` 최상위에 호이스팅하고 뷰만 전환. 언마운트로 인한 음성 단절 회귀를 구조적으로 차단.
-- **Persistence: MariaDB + Redis Hybrid** — 휘발성 방은 Redis에만 두고 GC로 즉시 파기, 영구 방·대화 기록만 MariaDB에 영속화해 서버 재기동 후 `RoomRehydrator`로 복원.
-
----
-
 ## 🧪 Test & Quality (테스트 및 품질)
 
 Redis DB 격리 + 자동 Teardown 환경에서 **72개 통합 테스트 100% ALL PASS**, 프론트엔드 린트 0 error·빌드 무결성을 유지합니다.
