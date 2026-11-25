@@ -123,7 +123,7 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 - **정밀 오디오 파이프라인 (`VoiceAudioEngine`)**:
   - `MediaStreamSource` → `GainNode`(200% 증폭) → `DynamicsCompressorNode`(피크 방어) → `AnalyserNode`
   - 참여자별 개별 볼륨(0~200%)·마스터 볼륨(0~100%), UID별 영구 기억, 장치 핫스왑
-- **온디바이스 AI 잡음 제거**: RNNoise(WASM 신경망) AudioWorklet, Web Audio 단일 가청 경로
+- **온디바이스 AI 잡음 제거**: 말하는 쪽 브라우저에서 RNNoise(WASM 신경망)를 AudioWorklet으로 실행, 모델(약 157KB)은 통화 참여 시 온디맨드 로드, 실패 시 원음 바이패스
 - **독립 출력 장치 라우팅 (Phase 13)**: 입력/출력 완전 분리, `AudioContext.setSinkId()` 핫스왑, 물리 장치 1:1 단일 노출
 - **고급 음성 UX & PTT**: 20단계 6그라디언트 VU, 3초 루프백 테스트, `event.code` PTT, 4중 Stuck Mute 방어
 
@@ -175,6 +175,9 @@ cd backend && .\mvnw.cmd test
 
 # 프론트엔드 린트 & 빌드 (0 error)
 cd frontend && npm run lint && npm run build
+
+# RNNoise 실동작 검사 (설치된 Chrome에서 잡음 감소량 측정)
+npm run check:noise
 ```
 
 | 테스트 클래스 | 테스트 수 | 검증 대상 | 결과 |
@@ -238,10 +241,11 @@ Talklite/
 │       ├── signaling/                   # WebRTC 시그널링 (Offer/Answer/ICE)
 │       └── voice/                       # 6인 음성 원자 가드 & 발화 상태
 ├── frontend/                            # React 19 + TypeScript + Vite
+│   ├── tests/                           # RNNoise 실동작 검사 (check:noise)
 │   └── src/
 │       ├── components/                  # Header, SearchBar, RoomCard, VoiceBar, FloatingVoiceWidget,
 │       │                                # AudioSettingsModal, NicknameModal, ChatLog, MemberList, Toast 등
-│       ├── lib/                         # webrtc, voiceAudioEngine, audioDetector, gamePresets, stomp, api
+│       ├── lib/                         # webrtc, voiceAudioEngine, noise(RNNoise), audioDetector, gamePresets, stomp, api
 │       ├── store/                       # Zustand (roomStore, voiceStore, lobbyStore, userStore, toastStore)
 │       └── pages/                       # LobbyPage, RoomPage
 ├── docs/                                # README 스크린샷 (docs/images)
