@@ -122,7 +122,7 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 - **Perfect Negotiation 패턴**: Google 공용 STUN으로 NAT/방화벽 통과 및 시그널링 충돌 방지
 - **정밀 오디오 파이프라인 (`VoiceAudioEngine`)**:
   - `MediaStreamSource` → `GainNode`(200% 증폭) → `DynamicsCompressorNode`(피크 방어) → `AnalyserNode`
-  - 참여자별 개별 볼륨(0~200%)·마스터 볼륨(0~100%), UID별 영구 기억, 장치 핫스왑
+  - 참여자별 개별 볼륨(0\~200%)·마스터 볼륨(0\~100%), UID별 영구 기억, 장치 핫스왑
 - **온디바이스 AI 잡음 제거**: 말하는 쪽 브라우저에서 RNNoise(WASM 신경망)를 AudioWorklet으로 실행, 모델(약 157KB)은 통화 참여 시 온디맨드 로드, 실패 시 원음 바이패스, Web Audio 단일 가청 경로
 - **독립 출력 장치 라우팅 (Phase 13)**: 입력/출력 완전 분리, `AudioContext.setSinkId()` 핫스왑, 물리 장치 1:1 단일 노출
 - **고급 음성 UX & PTT**: 20단계 6그라디언트 VU, 3초 루프백 테스트, `event.code` PTT, 4중 Stuck Mute 방어
@@ -198,7 +198,7 @@ npm run check:noise
 | `PerformanceLatencyIntegrationTest` | 1 | 500 병렬 원자 정원 가드 + 평균 지연 ≤ 200ms | ✅ PASS |
 | `SearchApiIntegrationTest` | 19 | 태그 SINTER·부분일치·게임 별칭·검색 범위 필터, 3×2 복합 정렬, 대소문자 정규화, 위반 400, title null 혼합, 방 생성 이력 | ✅ PASS |
 | `ChatRealtimeIntegrationTest` | 2 | STOMP 채팅 실시간 브로드캐스트 및 clientRequestId 에코 | ✅ PASS |
-| **합계** | **72** | **T-01~T-11 전체 시나리오, DEF-01~09, Phase 8~15 전수 검증** | **ALL PASS** |
+| **합계** | **72** | **T-01\~T-11 전체 시나리오, DEF-01\~09, Phase 8\~15 전수 검증** | **ALL PASS** |
 
 ---
 
