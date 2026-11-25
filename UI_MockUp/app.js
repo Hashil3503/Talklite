@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
       noiseActive = !noiseActive;
       if (noiseActive) {
         noiseBtn.classList.add('active');
-        noiseBtn.textContent = '🧠 DeepFilterNet ON';
+        noiseBtn.textContent = '🧠 RNNoise ON';
         showToast('🧠 WASM 딥러닝 잡음 제거 활성화 (키보드 타건음 차단)');
       } else {
         noiseBtn.classList.remove('active');

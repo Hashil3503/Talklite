@@ -1,6 +1,6 @@
 /**
  * Phase 8 VoiceAudioEngine — Web Audio 기반 정밀 볼륨 제어 엔진.
- * 송신: rawMicStream -> Source -> [DenoiseWorklet(Phase 12, 옵션)] -> inputGain(0~2.0) -> DynamicsCompressor(-6dB 12:1) -> Destination
+ * 송신: rawMicStream -> Source -> [RNNoise AudioWorklet(Phase 12, 옵션)] -> inputGain(0~2.0) -> DynamicsCompressor(-6dB 12:1) -> Destination
  * 수신: peer Stream -> Source -> peerGain(0~2.0) -> masterGain(0~1.0) -> AudioContext.destination
  *
  * Phase 12 단순 스왑 파이프라인 (P0-4): 이중 Gain 병렬·크로스페이드 제거
@@ -9,8 +9,8 @@
  * Destination 불변, denoiseSeq 경합 가드, WASM 실패 시 Graceful Fallback.
  */
 
-import { createDenoiseNode, disposeHandle, type DenoiseEngineHandle } from './noise/denoiseEngine'
-import type { NoiseSuppressionModel } from './noise/types'
+import type { RnnoiseWorkletNode } from '@sapphi-red/web-noise-suppressor'
+import { createDenoiseNode, disposeDenoiseNode } from './noise/denoiseEngine'
 
 export interface OutputDeviceResult {
   applied: boolean
@@ -39,7 +39,7 @@ export interface VoiceAudioEngine {
   getProcessedStream(): MediaStream | null
   getContextState(): AudioContextState | null
   getAnalyser(): AnalyserNode | null
-  setNoiseSuppression(enabled: boolean, model: NoiseSuppressionModel): Promise<boolean>
+  setNoiseSuppression(enabled: boolean): Promise<boolean>
 }
 
 interface PeerOutput {
@@ -70,10 +70,9 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
   private mediaElementSinkFailures = 0
 
   // Phase 12 — 단순 스왑: 단일 worklet 노드로 축소 (이중 Gain 제거)
-  private denoiseHandle: DenoiseEngineHandle | null = null
+  private denoiseNode: RnnoiseWorkletNode | null = null
   private denoiseSeq = 0
   private noiseSuppressionEnabled = false
-  private noiseSuppressionModel: NoiseSuppressionModel = 'deepfilternet'
 
   private ensureContext(): AudioContext {
     if (this.ctx) return this.ctx
@@ -210,22 +209,22 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     } catch {
       // ignore
     }
-    if (this.denoiseHandle) {
+    if (this.denoiseNode) {
       try {
-        this.denoiseHandle.node.disconnect()
+        this.denoiseNode.disconnect()
       } catch {
         // ignore
       }
     }
-    if (this.noiseSuppressionEnabled && this.denoiseHandle) {
+    if (this.noiseSuppressionEnabled && this.denoiseNode) {
       // ON: source -> worklet -> inputGain
       try {
-        source.connect(this.denoiseHandle.node)
+        source.connect(this.denoiseNode)
       } catch {
         // ignore
       }
       try {
-        this.denoiseHandle.node.connect(this.inputGain)
+        this.denoiseNode.connect(this.inputGain)
       } catch {
         // ignore
       }
@@ -477,8 +476,8 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     return this.ctx ? this.ctx.state : null
   }
 
-  setNoiseSuppression(enabled: boolean, model: NoiseSuppressionModel): Promise<boolean> {
-    return this.applyNoiseSuppression(enabled, model)
+  setNoiseSuppression(enabled: boolean): Promise<boolean> {
+    return this.applyNoiseSuppression(enabled)
   }
 
   /**
@@ -487,12 +486,10 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
    * ON:  source -> worklet -> inputGain
    * Destination 불변, seq 경합 가드, 실패 시 bypass 유지
    */
-  private async applyNoiseSuppression(enabled: boolean, model: NoiseSuppressionModel): Promise<boolean> {
+  private async applyNoiseSuppression(enabled: boolean): Promise<boolean> {
     if (!this.ctx || !this.inputSource || !this.inputGain) return false
     const ctx = this.ctx
     const seq = ++this.denoiseSeq
-
-    this.noiseSuppressionModel = model
 
     if (!enabled) {
       this.noiseSuppressionEnabled = false
@@ -502,9 +499,9 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
       } catch {
         // ignore
       }
-      if (this.denoiseHandle) {
+      if (this.denoiseNode) {
         try {
-          this.denoiseHandle.node.disconnect()
+          this.denoiseNode.disconnect()
         } catch {
           // ignore
         }
@@ -520,8 +517,8 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
       return true
     }
 
-    // ON: 이미 같은 모델로 ON이면 재연결 보장 후 반환
-    if (this.noiseSuppressionEnabled && this.denoiseHandle && this.denoiseHandle.model === model) {
+    // ON: 이미 ON이면 재연결 보장 후 반환
+    if (this.noiseSuppressionEnabled && this.denoiseNode) {
       // 이미 ON — 간선 보장 (suspended resume 등으로 끊겼을 수 있음)
       try {
         this.inputSource.disconnect()
@@ -529,17 +526,17 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
         // ignore
       }
       try {
-        this.denoiseHandle.node.disconnect()
+        this.denoiseNode.disconnect()
       } catch {
         // ignore
       }
       try {
-        this.inputSource.connect(this.denoiseHandle.node)
+        this.inputSource.connect(this.denoiseNode)
       } catch {
         // ignore
       }
       try {
-        this.denoiseHandle.node.connect(this.inputGain)
+        this.denoiseNode.connect(this.inputGain)
       } catch {
         // ignore
       }
@@ -547,38 +544,33 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
     }
 
     try {
-      const needsNewNode = !this.denoiseHandle || this.denoiseHandle.model !== model
-      if (needsNewNode) {
-        const oldHandle = this.denoiseHandle
-        const node = await createDenoiseNode(ctx, model)
+      if (!this.denoiseNode) {
+        const created = await createDenoiseNode(ctx)
         if (seq !== this.denoiseSeq) {
-          disposeHandle({ model, node, dispose: () => {} })
+          disposeDenoiseNode(created)
           return false
         }
-        if (oldHandle) {
-          disposeHandle(oldHandle)
-        }
-        this.denoiseHandle = { model, node, dispose: () => disposeHandle({ model, node, dispose: () => {} }) }
+        this.denoiseNode = created
       }
       // 원자 스왑: source -> worklet -> inputGain
-      const handle = this.denoiseHandle!
+      const node = this.denoiseNode
       try {
         this.inputSource.disconnect()
       } catch {
         // ignore
       }
       try {
-        handle.node.disconnect()
+        node.disconnect()
       } catch {
         // ignore
       }
       try {
-        this.inputSource.connect(handle.node)
+        this.inputSource.connect(node)
       } catch {
         // ignore
       }
       try {
-        handle.node.connect(this.inputGain)
+        node.connect(this.inputGain)
       } catch {
         // ignore
       }
@@ -595,9 +587,9 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
         } catch {
           // ignore
         }
-        if (this.denoiseHandle) {
+        if (this.denoiseNode) {
           try {
-            this.denoiseHandle.node.disconnect()
+            this.denoiseNode.disconnect()
           } catch {
             // ignore
           }
@@ -615,19 +607,8 @@ export class VoiceAudioEngineImpl implements VoiceAudioEngine {
 
   /** denoise 노드 해제 — 단일 노드만 정리 */
   private teardownDenoiseNodes(): void {
-    if (this.denoiseHandle) {
-      try {
-        this.denoiseHandle.node.disconnect()
-      } catch {
-        // ignore
-      }
-      disposeHandle(this.denoiseHandle)
-      this.denoiseHandle = null
-    }
-  }
-
-  getNoiseSuppressionState(): { enabled: boolean; model: NoiseSuppressionModel } {
-    return { enabled: this.noiseSuppressionEnabled, model: this.noiseSuppressionModel }
+    disposeDenoiseNode(this.denoiseNode)
+    this.denoiseNode = null
   }
 
   getAnalyser(): AnalyserNode | null {

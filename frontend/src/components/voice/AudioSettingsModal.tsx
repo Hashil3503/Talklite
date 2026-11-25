@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react'
 import { useVoiceStore } from '../../store/voiceStore'
-import { NOISE_MODEL_META, type NoiseSuppressionModel } from '../../lib/noise/types'
 import { VuMeter } from './VuMeter'
 
 interface AudioSettingsModalProps {
@@ -15,7 +14,6 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, 
   const pttKey = useVoiceStore((state) => state.pttKey)
   const isTestingMic = useVoiceStore((state) => state.isTestingMic)
   const isNoiseSuppressionEnabled = useVoiceStore((state) => state.isNoiseSuppressionEnabled)
-  const noiseSuppressionModel = useVoiceStore((state) => state.noiseSuppressionModel)
   const isNoiseLoading = useVoiceStore((state) => state.isNoiseLoading)
   const noiseError = useVoiceStore((state) => state.noiseError)
   const isDenoiserSupported = useVoiceStore((state) => state.isDenoiserSupported)
@@ -27,7 +25,6 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, 
   const startMicTest = useVoiceStore((state) => state.startMicTest)
   const stopMicTest = useVoiceStore((state) => state.stopMicTest)
   const setNoiseSuppression = useVoiceStore((state) => state.setNoiseSuppression)
-  const setNoiseSuppressionModel = useVoiceStore((state) => state.setNoiseSuppressionModel)
 
   const [isCapturing, setIsCapturing] = useState(false)
 
@@ -242,7 +239,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, 
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
             <span id="talklite-noise-label" className="text-xs text-zinc-400">
-              딥러닝 잡음 제거 사용
+              RNNoise 딥러닝 잡음 제거 사용
             </span>
             <button
               type="button"
@@ -262,32 +259,6 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, 
               />
             </button>
           </div>
-          {isDenoiserSupported && isNoiseSuppressionEnabled && (
-            <div className="mt-2 space-y-1" role="radiogroup" aria-label="잡음 제거 엔진 선택">
-              {(Object.keys(NOISE_MODEL_META) as NoiseSuppressionModel[]).map((m) => (
-                <label
-                  key={m}
-                  className={`flex cursor-pointer items-start gap-2 rounded-md p-1.5 transition-colors ${
-                    noiseSuppressionModel === m ? 'bg-emerald-950/60 border border-emerald-800' : 'hover:bg-[#121217] border border-transparent'
-                  } ${isNoiseLoading ? 'pointer-events-none opacity-60' : ''}`}
-                >
-                  <input
-                    type="radio"
-                    name="talklite-noise-model"
-                    value={m}
-                    checked={noiseSuppressionModel === m}
-                    disabled={isNoiseLoading}
-                    onChange={() => void setNoiseSuppressionModel(m)}
-                    className="mt-0.5 accent-emerald-500"
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-xs font-semibold text-zinc-200">{NOISE_MODEL_META[m].label}</span>
-                    <span className="block text-[10px] leading-tight text-zinc-500">{NOISE_MODEL_META[m].description}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
           {noiseError && <p className="mt-1 text-[10px] leading-tight text-amber-400">{noiseError}</p>}
         </div>
 

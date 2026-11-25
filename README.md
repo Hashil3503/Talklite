@@ -123,7 +123,7 @@ Talklite는 이 마찰을 제거한 **온디맨드(On-demand) 파티 매칭 & �
 - **정밀 오디오 파이프라인 (`VoiceAudioEngine`)**:
   - `MediaStreamSource` → `GainNode`(200% 증폭) → `DynamicsCompressorNode`(피크 방어) → `AnalyserNode`
   - 참여자별 개별 볼륨(0~200%)·마스터 볼륨(0~100%), UID별 영구 기억, 장치 핫스왑
-- **온디바이스 플러그형 잡음 제거**: DeepFilterNet / SpeexDSP 2종 정예 엔진, Web Audio 단일 가청 경로
+- **온디바이스 AI 잡음 제거**: RNNoise(WASM 신경망) AudioWorklet, Web Audio 단일 가청 경로
 - **독립 출력 장치 라우팅 (Phase 13)**: 입력/출력 완전 분리, `AudioContext.setSinkId()` 핫스왑, 물리 장치 1:1 단일 노출
 - **고급 음성 UX & PTT**: 20단계 6그라디언트 VU, 3초 루프백 테스트, `event.code` PTT, 4중 Stuck Mute 방어
 

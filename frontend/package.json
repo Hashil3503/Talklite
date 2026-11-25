@@ -10,9 +10,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:noise": "node tests/noise-suppression.check.mjs"
   },
   "dependencies": {
+    "@sapphi-red/web-noise-suppressor": "^0.4.2",
     "@stomp/stompjs": "^7.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-virtual": "^3.14.10",

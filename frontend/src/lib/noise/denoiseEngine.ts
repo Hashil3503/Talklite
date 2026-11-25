@@ -1,94 +1,45 @@
 /**
- * Phase 12 — 플러그형 잡음 제거 엔진(AudioWorklet) 공용 베이스 및 온디맨드 로더.
- *
- * 파이프라인 위상 (VoiceAudioEngine 내부):
- *   inputSource ──► [denoiseGain(deprecated bypass) ] ─► inputGain ─► ...
- *
- *   실제 denoise 토폴로지:
- *     source ──► denoiseInput(gain) ──► AudioWorkletNode(model) ──► denoiseOutput(gain) ──► inputGain
- *     source ─────────────────────────────────────────────────────────► inputGain   (bypass 경로)
- *
- *   ON: denoiseInput/denoiseOutput 게인 5ms 크로스페이드로 1.0, bypass 게인 0.0
- *   OFF: 반대. Destination 노드는 불변이며 WebRTC 송신 트랙이 끊기지 않는다.
+ * Phase 12 — RNNoise(xiph, 학습된 가중치 내장 WASM) AudioWorklet 온디맨드 로더.
+ * 파이프라인: source -> RnnoiseWorkletNode -> inputGain (OFF 시 source -> inputGain)
  */
 
-import type { NoiseSuppressionModel } from './types'
-import { FRAME_SIZE } from './types'
+import { loadRnnoise, RnnoiseWorkletNode } from '@sapphi-red/web-noise-suppressor'
+import rnnoiseWorkletUrl from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url'
+import rnnoiseWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url'
+import rnnoiseSimdWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url'
 
-// 프레임 크기 단일 소스 재노출 (worklet 스텁과 공유 — 10ms @48kHz)
-export { FRAME_SIZE }
+/** RNNoise는 48kHz로만 학습됨 */
+const RNNOISE_SAMPLE_RATE = 48000
 
-export interface DenoiseEngineHandle {
-  model: NoiseSuppressionModel
-  node: AudioWorkletNode
-  dispose(): void
+let modelPromise: Promise<ArrayBuffer> | null = null
+
+/** 모델 다운로드 + 검증. worklet은 모델 로드 실패를 알리지 않고 무음이 되므로 여기서 먼저 컴파일해 확인한다. */
+function loadModel(): Promise<ArrayBuffer> {
+  modelPromise ??= loadRnnoise({ url: rnnoiseWasmUrl, simdUrl: rnnoiseSimdWasmUrl })
+    .then(async (binary) => {
+      await WebAssembly.compile(binary)
+      return binary
+    })
+    .catch((err: unknown) => {
+      modelPromise = null // 다음 시도에서 다시 내려받는다
+      throw err
+    })
+  return modelPromise
 }
 
-/** worklet 프로세서 파일 URL (public/wasm/ 서빙) */
-const WORKLET_URLS: Record<NoiseSuppressionModel, string> = {
-  deepfilternet: '/wasm/deepfilternet-worklet.js',
-  speex: '/wasm/speex-worklet.js',
-}
-
-/** 모듈별 로딩 중복 방지 (동일 AudioContext 기준) */
-const workletLoaded = new WeakMap<AudioContext, Set<NoiseSuppressionModel>>()
-
-/** 온디맨드 worklet 모듈 로딩 (중복 addModule 방지) */
-export async function ensureWorkletModule(ctx: AudioContext, model: NoiseSuppressionModel): Promise<void> {
-  let loaded = workletLoaded.get(ctx)
-  if (!loaded) {
-    loaded = new Set()
-    workletLoaded.set(ctx, loaded)
+/** RNNoise 노드 생성. 실패 예외는 상위(Graceful Fallback)로 그대로 전파한다. */
+export async function createDenoiseNode(ctx: AudioContext): Promise<RnnoiseWorkletNode> {
+  if (ctx.sampleRate !== RNNOISE_SAMPLE_RATE) {
+    throw new Error(`RNNoise requires ${RNNOISE_SAMPLE_RATE}Hz, got ${ctx.sampleRate}Hz`)
   }
-  if (loaded.has(model)) return
-  await ctx.audioWorklet.addModule(WORKLET_URLS[model])
-  loaded.add(model)
+  const [wasmBinary] = await Promise.all([loadModel(), ctx.audioWorklet.addModule(rnnoiseWorkletUrl)])
+  return new RnnoiseWorkletNode(ctx, { maxChannels: 1, wasmBinary })
 }
 
-/**
- * 데노이즈 AudioWorkletNode 생성.
- * WASM 로딩 실패 등 예외는 상위(Gaceful Fallback)로 그대로 전파한다.
- */
-export async function createDenoiseNode(ctx: AudioContext, model: NoiseSuppressionModel): Promise<AudioWorkletNode> {
-  await ensureWorkletModule(ctx, model)
-  const node = new AudioWorkletNode(ctx, `talklite-denoise-${model}`, {
-    numberOfInputs: 1,
-    numberOfOutputs: 1,
-    outputChannelCount: [1],
-    channelCount: 1,
-    channelCountMode: 'explicit',
-    channelInterpretation: 'speakers',
-  })
-  return node
-}
-
-/** 5ms 선형 크로스페이드 (팝 노이즈 방어) */
-export const CROSSFADE_SEC = 0.005
-
-export function rampGain(gain: GainNode, ctx: AudioContext, to: number): void {
-  const now = ctx.currentTime
-  const param = gain.gain
-  param.cancelScheduledValues(now)
-  param.setValueAtTime(param.value, now)
-  param.linearRampToValueAtTime(to, now + CROSSFADE_SEC)
-}
-
-/** 엔진 핸들 정리 (disconnect + port 메시지 + port.close로 완전 해제) */
-export function disposeHandle(handle: DenoiseEngineHandle | null): void {
-  if (!handle) return
-  try {
-    handle.node.disconnect()
-  } catch {
-    // ignore
-  }
-  try {
-    handle.node.port.postMessage({ type: 'dispose' })
-  } catch {
-    // ignore — 프로세서가 이미 종료된 경우
-  }
-  try {
-    handle.node.port.close()
-  } catch {
-    // ignore — 이미 닫힌 경우
-  }
+/** 노드 정리 (disconnect + WASM 상태 해제 + port 닫기) */
+export function disposeDenoiseNode(node: RnnoiseWorkletNode | null): void {
+  if (!node) return
+  node.disconnect()
+  node.destroy()
+  node.port.close()
 }
