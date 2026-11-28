@@ -11,7 +11,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "check:noise": "node tests/noise-suppression.check.mjs"
+    "check:noise": "node tests/noise-suppression.check.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@sapphi-red/web-noise-suppressor": "^0.4.2",
@@ -25,13 +26,17 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^31.0.1",
     "oxlint": "^1.75.0",
     "playwright": "^1.62.1",
     "typescript": "~5.9.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vitest": "^5.1.2"
   }
 }
