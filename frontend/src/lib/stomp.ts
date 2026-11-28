@@ -1,5 +1,7 @@
 import { Client, type IMessage, type StompHeaders } from '@stomp/stompjs'
 import { createSession } from './api'
+import { getStoredSecret, getStoredUid, saveSessionCredentials } from './uid'
+import { useUserStore } from '../store/userStore'
 
 let stompClient: Client | null = null
 let activeToken: string | null = null
@@ -17,17 +19,21 @@ function recoverSession(): Promise<void> {
   if (recoveryPromise) return recoveryPromise
 
   recoveryPromise = (async () => {
-    const uid = localStorage.getItem('talklite_uid')
-    if (!uid) return
+    const uid = getStoredUid()
 
     activeToken = null
     localStorage.removeItem('talklite_token')
     localStorage.removeItem('talklite_token_expires_at')
 
-    const session = await createSession(uid)
+    const session = await createSession(uid || undefined, getStoredSecret() || undefined)
     localStorage.setItem('talklite_token', session.token)
     localStorage.setItem('talklite_token_expires_at', String(Date.now() + session.expiresIn * 1000))
     activeToken = session.token
+    // 서버가 새 UID(또는 새 비밀값)를 발급한 경우 저장하고 스토어 UID도 갱신
+    if (session.user !== uid || session.secret) {
+      saveSessionCredentials(session.user, session.secret)
+      useUserStore.getState().setUid(session.user)
+    }
 
     const client = stompClient
     if (!client) return

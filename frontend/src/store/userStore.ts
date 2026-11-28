@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getOrCreateAnonymousId } from '../lib/uid'
+import { getStoredUid } from '../lib/uid'
 
 const NICKNAME_KEY = 'talklite_nickname'
 
@@ -10,6 +10,7 @@ interface UserState {
   avatarInitial: string
   shortUid: string
   setNickname: (name: string) => void
+  setUid: (uid: string) => void
 }
 
 function loadNickname(): string {
@@ -29,7 +30,7 @@ function derive(nickname: string, uid: string) {
   }
 }
 
-const initialUid = getOrCreateAnonymousId()
+const initialUid = getStoredUid()
 const initialNickname = loadNickname()
 
 export const useUserStore = create<UserState>((set) => ({
@@ -47,5 +48,10 @@ export const useUserStore = create<UserState>((set) => ({
       // ignore
     }
     set({ nickname: trimmed, ...derive(trimmed, uid) })
+  },
+
+  setUid: (uid) => {
+    const { nickname } = useUserStore.getState()
+    set({ uid, ...derive(nickname, uid) })
   },
 }))

@@ -1,4 +1,4 @@
 package com.talklite.auth;
 
-public record SessionRequest(String user) {
+public record SessionRequest(String user, String secret) {
 }

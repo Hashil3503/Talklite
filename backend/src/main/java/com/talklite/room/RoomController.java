@@ -23,11 +23,14 @@ public class RoomController {
     private final RoomService roomService;
     private final KickService kickService;
     private final ChatService chatService;
+    private final RoomMapper roomMapper;
 
-    public RoomController(RoomService roomService, KickService kickService, ChatService chatService) {
+    public RoomController(RoomService roomService, KickService kickService, ChatService chatService,
+                          RoomMapper roomMapper) {
         this.roomService = roomService;
         this.kickService = kickService;
         this.chatService = chatService;
+        this.roomMapper = roomMapper;
     }
 
     @PostMapping
@@ -37,7 +40,8 @@ public class RoomController {
     }
 
     @GetMapping("/{roomId}")
-    public RoomResponse get(@PathVariable String roomId) {
+    public RoomResponse get(@PathVariable String roomId, @AuthenticatedUser String principal) {
+        requirePrivateMember(roomId, principal);
         return roomService.get(roomId);
     }
 
@@ -47,8 +51,21 @@ public class RoomController {
      */
     @GetMapping("/{roomId}/messages")
     public List<ChatMessage> getMessages(@PathVariable String roomId,
-                                         @RequestParam(name = "limit", defaultValue = "50") int limit) {
+                                         @RequestParam(name = "limit", defaultValue = "50") int limit,
+                                         @AuthenticatedUser String principal) {
+        requirePrivateMember(roomId, principal);
         return chatService.recentMessages(roomId, limit);
+    }
+
+    /** 비공개 방은 멤버만 조회 가능 (공개/미존재 방은 통과 — 미존재는 서비스가 404 처리) */
+    private void requirePrivateMember(String roomId, String principal) {
+        Room room = roomMapper.find(roomId);
+        if (room == null || room.scope() != RoomScope.PRIVATE) {
+            return;
+        }
+        if (!roomMapper.members(roomId).contains(principal)) {
+            throw new NotMemberException();
+        }
     }
 
     @PostMapping("/{roomId}/members/{user}")

@@ -5,7 +5,7 @@ import { useLobbyStore, type SortKey, type SortOrder } from '../store/lobbyStore
 import { useToastStore } from '../store/toastStore'
 import { createRoom, joinWithInviteCode, joinRoom, type RoomScope, type RoomType } from '../lib/api'
 import { subscribeTopic } from '../lib/stomp'
-import { getOrCreateAnonymousId } from '../lib/uid'
+import { getStoredUid } from '../lib/uid'
 import { GAME_SUGGESTIONS } from '../lib/gamePresets'
 
 const SORT_OPTIONS: { label: string; value: string }[] = [
@@ -56,7 +56,7 @@ export function LobbyPage({
   const [inviteCodeInput, setInviteCodeInput] = useState('')
   const [inviteError, setInviteError] = useState<string | null>(null)
 
-  const getCurrentUserId = () => getOrCreateAnonymousId()
+  const getCurrentUserId = () => getStoredUid()
 
   useEffect(() => {
     refresh()

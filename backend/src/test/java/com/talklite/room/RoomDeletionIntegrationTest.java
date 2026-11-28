@@ -109,7 +109,8 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
         assertFalse(redis.opsForSet().isMember("tag:competitive:rooms", roomId), "tag 역색인에서 제거되어야 함");
 
         // 4. GET /api/rooms/{id} 조회 시 404 확인
-        mockMvc.perform(get("/api/rooms/" + roomId))
+        mockMvc.perform(get("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("host-admin")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("room_not_found"));
     }

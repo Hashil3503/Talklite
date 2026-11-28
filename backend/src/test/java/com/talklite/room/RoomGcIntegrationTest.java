@@ -97,7 +97,8 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
                 .andExpect(status().isOk());
 
         // 1) 방 조회 404
-        mockMvc.perform(get("/api/rooms/" + roomId)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/rooms/" + roomId).header("Authorization", tokenFor("gc-host")))
+                .andExpect(status().isNotFound());
 
         // 2) 초대코드 무효화 (역방향 invite:{code} DEL)
         mockMvc.perform(post("/api/invite/" + code + "/join")
@@ -126,7 +127,8 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
                         .content(objectMapper.writeValueAsString(new JoinRequest("gc-perm-host"))))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/rooms/" + roomId)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/rooms/" + roomId).header("Authorization", tokenFor("gc-perm-host")))
+                .andExpect(status().isOk());
         assertEquals(true, Boolean.TRUE.equals(redis.hasKey("room:" + roomId + ":meta")), "영구 방 메타 유지");
         boolean persisted = permanentRoomRepository.findAll().stream().anyMatch(r -> r.id().equals(roomId));
         assertEquals(true, persisted, "MariaDB 영속 유지");

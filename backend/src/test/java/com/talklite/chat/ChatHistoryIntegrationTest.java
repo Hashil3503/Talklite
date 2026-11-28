@@ -2,7 +2,6 @@ package com.talklite.chat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.talklite.auth.SessionRequest;
 import com.talklite.auth.SessionResponse;
 import com.talklite.realtime.StompTestClient;
 import com.talklite.room.CreateRoomRequest;
@@ -51,11 +50,7 @@ public class ChatHistoryIntegrationTest extends IntegrationTestCleanup {
     private int port;
 
     private SessionResponse createSession(String user) throws Exception {
-        String json = mockMvc.perform(post("/api/session")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new SessionRequest(user))))
-                .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(json, SessionResponse.class);
+        return sessionService.create(user);
     }
 
     private String createPermanentRoom(String game, String host) throws Exception {
@@ -71,7 +66,8 @@ public class ChatHistoryIntegrationTest extends IntegrationTestCleanup {
     }
 
     private JsonNode getMessages(String roomId) throws Exception {
-        String json = mockMvc.perform(get("/api/rooms/" + roomId + "/messages"))
+        String json = mockMvc.perform(get("/api/rooms/" + roomId + "/messages")
+                        .header("Authorization", tokenFor("ch-reader")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(json);
@@ -117,7 +113,8 @@ public class ChatHistoryIntegrationTest extends IntegrationTestCleanup {
         assertEquals("hello2", messages.get(1).get("content").asText(), "1번: 두 번째 메시지");
 
         // limit 파라미터 검증 (limit=1 → 가장 최근 메시지 1건)
-        String limitedJson = mockMvc.perform(get("/api/rooms/" + roomId + "/messages").param("limit", "1"))
+        String limitedJson = mockMvc.perform(get("/api/rooms/" + roomId + "/messages").param("limit", "1")
+                        .header("Authorization", tokenFor("ch-reader")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode limitedMessages = objectMapper.readTree(limitedJson);

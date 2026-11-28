@@ -36,6 +36,12 @@ public class RoomExceptionHandler {
                 .body(Map.of("error", "unauthorized_host"));
     }
 
+    @ExceptionHandler(NotMemberException.class)
+    ResponseEntity<Map<String, String>> notMember(NotMemberException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "not_a_member"));
+    }
+
     @ExceptionHandler(InvalidKickException.class)
     public ResponseEntity<Map<String, String>> invalidKick(InvalidKickException e) {
         return ResponseEntity.badRequest()

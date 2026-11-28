@@ -9,7 +9,7 @@ import { EditRoomModal } from '../components/room/EditRoomModal'
 import { VoiceBar } from '../components/voice/VoiceBar'
 import { joinRoom, getRoom, deleteRoom, uploadRoomImage, getRoomInviteCode } from '../lib/api'
 import { gameBadgeClass } from '../lib/gameBadge'
-import { getOrCreateAnonymousId } from '../lib/uid'
+import { getStoredUid } from '../lib/uid'
 
 interface RoomPageProps {
   roomId: string
@@ -97,7 +97,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomId, onExit, onKicked }) 
   const isComposingRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const hadRoomRef = useRef(false)
-  const currentUserId = getOrCreateAnonymousId()
+  const currentUserId = getStoredUid()
 
   // @멘션 자동완성 상태
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)

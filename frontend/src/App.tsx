@@ -6,8 +6,9 @@ import { LobbyPage } from './pages/LobbyPage'
 import { RoomPage } from './pages/RoomPage'
 import { createSession, leaveRoom } from './lib/api'
 import { setSessionToken } from './lib/stomp'
-import { getOrCreateAnonymousId } from './lib/uid'
+import { getStoredSecret, getStoredUid, saveSessionCredentials } from './lib/uid'
 import { useRoomStore } from './store/roomStore'
+import { useUserStore } from './store/userStore'
 import { useVoiceStore } from './store/voiceStore'
 
 export type ActiveView = 'LOBBY' | 'ROOM'
@@ -24,19 +25,26 @@ export function App() {
   const isInVoice = useVoiceStore((state) => state.isInVoice)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  // 서버 발급 UID가 준비되기 전에는 로비/방을 렌더링하지 않는다
+  const [sessionReady, setSessionReady] = useState(false)
 
-  // 세션 토큰 초기화
+  // 세션 토큰 초기화 — 서버가 UID/비밀값을 발급하고, 이후 모든 화면은 그 UID를 사용한다
   useEffect(() => {
-    const uid = getOrCreateAnonymousId()
-    createSession(uid)
+    const storedUid = getStoredUid()
+    createSession(storedUid || undefined, getStoredSecret() || undefined)
       .then((res) => {
         localStorage.setItem('talklite_token', res.token)
         localStorage.setItem('talklite_token_expires_at', String(Date.now() + res.expiresIn * 1000))
         setSessionToken(res.token)
+        if (res.user !== storedUid || res.secret) {
+          saveSessionCredentials(res.user, res.secret)
+          useUserStore.getState().setUid(res.user)
+        }
       })
       .catch((err) => {
         console.warn('Failed to auto-create session:', err)
       })
+      .finally(() => setSessionReady(true))
   }, [])
 
   // P0-01: 비정상 단절(beforeunload/pagehide) 시 음성 리소스 정리 (STOMP Presence가 Redis 잔류 자동 정리)
@@ -86,7 +94,7 @@ export function App() {
     useVoiceStore.getState().leaveVoice(true)
     if (roomId) {
       try {
-        await leaveRoom(roomId, getOrCreateAnonymousId())
+        await leaveRoom(roomId, getStoredUid())
       } catch {
         // 404 등 이미 소멸된 방은 무시
       }
@@ -135,7 +143,9 @@ export function App() {
         onOpenInvite={handleOpenInviteModal}
       />
 
-      {activeView === 'LOBBY' ? (
+      {!sessionReady ? (
+        <div className="flex items-center justify-center py-24 text-sm text-zinc-400">Loading…</div>
+      ) : activeView === 'LOBBY' ? (
         <LobbyPage
           onJoinRoom={handleJoinRoom}
           showCreateModal={showCreateModal}
@@ -153,7 +163,9 @@ export function App() {
         )
       )}
 
-      {activeView === 'LOBBY' && isInVoice && <FloatingVoiceWidget onReturnToRoom={handleGotoRoom} />}
+      {sessionReady && activeView === 'LOBBY' && isInVoice && (
+        <FloatingVoiceWidget onReturnToRoom={handleGotoRoom} />
+      )}
 
       <ToastContainer />
     </div>

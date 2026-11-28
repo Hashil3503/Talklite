@@ -58,6 +58,10 @@ public class ChatService {
      * type/mediaUrl/mentions 확장 — mentions는 서버 확정.
      */
     public void send(String roomId, String sender, SendChatRequest request) {
+        // 비멤버 발신 메시지는 저장/브로드캐스트하지 않는다
+        if (sender == null || !roomMapper.members(roomId).contains(sender)) {
+            return;
+        }
         String rawContent = request.content() == null ? "" : request.content().trim();
         String rawType = request.type() == null || request.type().isBlank() ? TYPE_TALK : request.type().trim().toUpperCase();
         boolean isImage = TYPE_IMAGE.equals(rawType);

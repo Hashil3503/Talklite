@@ -3,7 +3,6 @@ package com.talklite.audit;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.talklite.auth.SessionRequest;
 import com.talklite.auth.SessionResponse;
 import com.talklite.realtime.StompTestClient;
 import com.talklite.room.CreateRoomRequest;
@@ -56,7 +55,8 @@ public class ComprehensiveAuditIntegrationTest extends IntegrationTestCleanup {
     }
 
     private RoomResponse getRoom(String roomId) throws Exception {
-        String content = mockMvc.perform(get("/api/rooms/" + roomId))
+        String content = mockMvc.perform(get("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("audit-reader")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readValue(content, RoomResponse.class);
@@ -72,11 +72,7 @@ public class ComprehensiveAuditIntegrationTest extends IntegrationTestCleanup {
     }
 
     private SessionResponse createSession(String user) throws Exception {
-        String json = mockMvc.perform(post("/api/session")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new SessionRequest(user))))
-                .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(json, SessionResponse.class);
+        return sessionService.create(user);
     }
 
     private String extractMentionsFromChatFrame(String frame) throws Exception {

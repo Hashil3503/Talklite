@@ -1,7 +1,6 @@
 package com.talklite.room;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.talklite.auth.SessionRequest;
 import com.talklite.auth.SessionResponse;
 import com.talklite.realtime.PresenceEventListener;
 import com.talklite.realtime.StompTestClient;
@@ -86,7 +85,8 @@ public class DefectRemediationIntegrationTest extends IntegrationTestCleanup {
                 .andExpect(status().isForbidden());
 
         // 4. 방이 삭제되지 않고 그대로 유지되는지 확인
-        mockMvc.perform(get("/api/rooms/" + roomId))
+        mockMvc.perform(get("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("h1")))
                 .andExpect(status().isOk());
     }
 
@@ -133,7 +133,8 @@ public class DefectRemediationIntegrationTest extends IntegrationTestCleanup {
                         .content("{\"actor\":\"new-hero\"}"))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/rooms/" + roomId))
+        mockMvc.perform(get("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("new-hero")))
                 .andExpect(status().isNotFound());
     }
 

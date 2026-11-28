@@ -3,7 +3,6 @@ package com.talklite.room;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.talklite.test.IntegrationTestCleanup;
-import com.talklite.auth.SessionRequest;
 import com.talklite.auth.SessionResponse;
 import com.talklite.realtime.StompTestClient;
 import org.junit.jupiter.api.DisplayName;
@@ -48,11 +47,7 @@ public class InviteAndAuthIntegrationTest extends IntegrationTestCleanup {
     }
 
     private SessionResponse createSession(String user) throws Exception {
-        String json = mockMvc.perform(post("/api/session")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new SessionRequest(user))))
-                .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(json, SessionResponse.class);
+        return sessionService.create(user);
     }
 
     @Test

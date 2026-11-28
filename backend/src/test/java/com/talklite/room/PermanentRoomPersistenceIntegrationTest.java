@@ -108,7 +108,8 @@ public class PermanentRoomPersistenceIntegrationTest extends IntegrationTestClea
 
         roomRehydrator.rehydrate();
 
-        mockMvc.perform(get("/api/rooms/" + roomId))
+        mockMvc.perform(get("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("second-user")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.host").value("second-user"))
                 .andExpect(jsonPath("$.count").value(0));
@@ -148,7 +149,8 @@ public class PermanentRoomPersistenceIntegrationTest extends IntegrationTestClea
 
         roomRehydrator.rehydrate();
 
-        mockMvc.perform(get("/api/rooms/" + id))
+        mockMvc.perform(get("/api/rooms/" + id)
+                        .header("Authorization", tokenFor("title-host")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("캐주얼 즐겜 방"));
     }

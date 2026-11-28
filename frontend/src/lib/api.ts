@@ -123,6 +123,7 @@ export interface SessionResponse {
   token: string
   user: string
   expiresIn: number
+  secret?: string | null
 }
 
 export interface InviteCodeResponse {
@@ -131,11 +132,14 @@ export interface InviteCodeResponse {
   expiresInSeconds: number
 }
 
-export async function createSession(user?: string): Promise<SessionResponse> {
+export async function createSession(user?: string, secret?: string): Promise<SessionResponse> {
+  const body: { user?: string; secret?: string } = {}
+  if (user) body.user = user
+  if (secret) body.secret = secret
   const res = await fetch('/api/session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(user ? { user } : {}),
+    body: JSON.stringify(body),
   })
   if (!res.ok) return parseError(res)
   return res.json()

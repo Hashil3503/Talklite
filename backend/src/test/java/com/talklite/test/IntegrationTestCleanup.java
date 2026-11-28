@@ -35,6 +35,7 @@ public abstract class IntegrationTestCleanup {
         jdbc.sql("DELETE FROM permanent_room").update();
         jdbc.sql("DELETE FROM permanent_room_chat").update();
         jdbc.sql("DELETE FROM room_creation_log").update();
+        jdbc.sql("DELETE FROM user_credential").update();
         var connection = redis.getConnectionFactory().getConnection();
         try {
             connection.serverCommands().flushDb();

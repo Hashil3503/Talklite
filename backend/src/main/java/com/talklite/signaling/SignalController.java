@@ -30,7 +30,8 @@ public class SignalController {
         if (from == null || message == null || message.to() == null || message.to().isBlank() || message.type() == null) {
             return;
         }
-        if (!roomMapper.members(roomId).contains(message.to())) {
+        var members = roomMapper.members(roomId);
+        if (!members.contains(from) || !members.contains(message.to())) {
             return;
         }
         publisher.publish(

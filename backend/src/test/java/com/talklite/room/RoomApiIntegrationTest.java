@@ -57,7 +57,8 @@ public class RoomApiIntegrationTest extends IntegrationTestCleanup {
         String roomId = createdRoom.id();
 
         // 2. 방 조회
-        mockMvc.perform(get("/api/rooms/" + roomId))
+        mockMvc.perform(get("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor("user-host-1")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(roomId))
                 .andExpect(jsonPath("$.host").value("user-host-1"));

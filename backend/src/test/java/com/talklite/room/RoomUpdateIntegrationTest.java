@@ -62,7 +62,8 @@ public class RoomUpdateIntegrationTest extends IntegrationTestCleanup {
                 .andExpect(jsonPath("$.capacity").value(5));
 
         // GET으로 재조회 시 반영 확인
-        mockMvc.perform(get("/api/rooms/" + roomId))
+        mockMvc.perform(get("/api/rooms/" + roomId)
+                        .header("Authorization", tokenFor(host)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.game").value("리그 오브 레전드"))
                 .andExpect(jsonPath("$.capacity").value(5));

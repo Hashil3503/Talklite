@@ -2,7 +2,6 @@ package com.talklite.realtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.talklite.test.IntegrationTestCleanup;
-import com.talklite.auth.SessionRequest;
 import com.talklite.auth.SessionResponse;
 import com.talklite.room.CreateRoomRequest;
 import com.talklite.room.JoinRequest;
@@ -45,11 +44,7 @@ public class SignalRealtimeIntegrationTest extends IntegrationTestCleanup {
     private int port;
 
     private SessionResponse createSession(String user) throws Exception {
-        String json = mockMvc.perform(post("/api/session")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new SessionRequest(user))))
-                .andReturn().getResponse().getContentAsString();
-        return objectMapper.readValue(json, SessionResponse.class);
+        return sessionService.create(user);
     }
 
     private String createRoom(String game, String host) throws Exception {

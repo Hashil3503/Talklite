@@ -1,23 +1,32 @@
-﻿const STORAGE_KEY = 'talklite_uid';
+const UID_KEY = 'talklite_uid'
+const SECRET_KEY = 'talklite_uid_secret'
 
 /**
- * 로컬 스토리지에서 익명 유저 고유 식별자(UUID)를 반환합니다.
- * 존재하지 않을 경우 새로 발급하여 저장합니다.
+ * 서버가 발급한 UID를 반환합니다. 아직 발급 전(앱 부팅 초기)이면 빈 문자열입니다.
  */
-export function getOrCreateAnonymousId(): string {
-  let uid = localStorage.getItem(STORAGE_KEY);
-  if (!uid) {
-    uid = crypto.randomUUID();
-    localStorage.setItem(STORAGE_KEY, uid);
+export function getStoredUid(): string {
+  try {
+    return localStorage.getItem(UID_KEY) || ''
+  } catch {
+    return ''
   }
-  return uid;
 }
 
 /**
- * 현재 발급된 익명 유저 UUID를 초기화하고 새로 발급합니다 (테스트/리셋용).
+ * 서버가 발급한 UID와 비밀값을 저장합니다.
  */
-export function resetAnonymousId(): string {
-  const uid = crypto.randomUUID();
-  localStorage.setItem(STORAGE_KEY, uid);
-  return uid;
+export function saveSessionCredentials(uid: string, secret?: string | null): void {
+  if (uid) localStorage.setItem(UID_KEY, uid)
+  if (secret) localStorage.setItem(SECRET_KEY, secret)
+}
+
+/**
+ * 저장된 비밀값을 반환합니다 (없으면 빈 문자열).
+ */
+export function getStoredSecret(): string {
+  try {
+    return localStorage.getItem(SECRET_KEY) || ''
+  } catch {
+    return ''
+  }
 }
