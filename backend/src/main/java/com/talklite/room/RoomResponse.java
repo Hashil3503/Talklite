@@ -14,7 +14,8 @@ public record RoomResponse(
         long createdAt,
         int count,
         int voiceCount,
-        List<String> members
+        List<String> members,
+        List<String> offlineMembers
 ) {
     public static RoomResponse from(Room room, List<String> members) {
         return from(room, members, null);
@@ -25,6 +26,11 @@ public record RoomResponse(
     }
 
     public static RoomResponse from(Room room, List<String> members, String title, int voiceCount) {
+        return from(room, members, title, voiceCount, List.of());
+    }
+
+    public static RoomResponse from(Room room, List<String> members, String title, int voiceCount,
+                                    List<String> offlineMembers) {
         return new RoomResponse(
                 room.id(),
                 title,
@@ -37,7 +43,8 @@ public record RoomResponse(
                 room.createdAt(),
                 members.size(),
                 voiceCount,
-                members
+                members,
+                offlineMembers == null ? List.of() : offlineMembers
         );
     }
 }

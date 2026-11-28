@@ -52,6 +52,7 @@ interface RoomState {
   currentRoom: RoomResponse | null
   messages: ChatMessage[]
   voiceMembers: string[]
+  offlineMembers: string[]
   subscriptions: { unsubscribe: () => void }[]
 
   setCurrentRoom: (room: RoomResponse | null) => void
@@ -68,10 +69,16 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   currentRoom: null,
   messages: [],
   voiceMembers: [],
+  offlineMembers: [],
   subscriptions: [],
 
   setCurrentRoom: (room) => {
-    set({ currentRoom: room, messages: [], voiceMembers: [] })
+    set({
+      currentRoom: room,
+      messages: [],
+      voiceMembers: [],
+      offlineMembers: room?.offlineMembers ?? [],
+    })
     if (room) {
       get().connectRoomStomp(room.id)
       void get().loadRecentMessages(room.id)
@@ -292,7 +299,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     if (event.type === 'ROOM_DESTROYED') {
       useVoiceStore.getState().forceDisconnectVoice()
       get().disconnectRoomStomp()
-      set({ currentRoom: null, messages: [], voiceMembers: [] })
+      set({ currentRoom: null, messages: [], voiceMembers: [], offlineMembers: [] })
       return
     }
 
@@ -300,9 +307,23 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     if (event.type === 'MEMBER_KICKED' && event.targetUser === currentUserId) {
       useVoiceStore.getState().forceDisconnectVoice()
       get().disconnectRoomStomp()
-      set({ currentRoom: null, messages: [], voiceMembers: [] })
+      set({ currentRoom: null, messages: [], voiceMembers: [], offlineMembers: [] })
       window.dispatchEvent(new CustomEvent('talklite:kicked', { detail: event }))
       return
+    }
+
+    if (event.type === 'MEMBER_OFFLINE' && event.actor) {
+      const offlineMembers = Array.from(new Set([...get().offlineMembers, event.actor]))
+      set({ offlineMembers })
+    } else if (event.type === 'MEMBER_ONLINE' && event.actor) {
+      const offlineMembers = get().offlineMembers.filter((m) => m !== event.actor)
+      set({ offlineMembers })
+    } else if (event.type === 'MEMBER_LEAVE' && event.actor) {
+      const offlineMembers = get().offlineMembers.filter((m) => m !== event.actor)
+      set({ offlineMembers })
+    } else if (event.type === 'MEMBER_KICKED' && event.targetUser) {
+      const offlineMembers = get().offlineMembers.filter((m) => m !== event.targetUser)
+      set({ offlineMembers })
     }
 
     if (event.type === 'MEMBER_JOIN' && event.actor) {

@@ -1,7 +1,9 @@
 package com.talklite.config;
 
 import com.talklite.auth.SessionService;
+import com.talklite.realtime.RoomEventPublisher;
 import com.talklite.realtime.RoomSessionRegistry;
+import com.talklite.room.Room;
 import com.talklite.room.RoomMapper;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -41,12 +43,15 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     private final SessionService sessionService;
     private final RoomMapper roomMapper;
     private final RoomSessionRegistry roomSessionRegistry;
+    private final RoomEventPublisher roomEventPublisher;
 
     public WebSocketAuthInterceptor(SessionService sessionService, RoomMapper roomMapper,
-                                    RoomSessionRegistry roomSessionRegistry) {
+                                    RoomSessionRegistry roomSessionRegistry,
+                                    RoomEventPublisher roomEventPublisher) {
         this.sessionService = sessionService;
         this.roomMapper = roomMapper;
         this.roomSessionRegistry = roomSessionRegistry;
+        this.roomEventPublisher = roomEventPublisher;
     }
 
     @Override
@@ -138,7 +143,17 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
         Set<String> tracked = (Set<String>) attrs.computeIfAbsent("roomSubscriptions", k -> new HashSet<String>());
         if (tracked.add(roomId)) {
+            boolean wasOffline = roomSessionRegistry.count(roomId, user) == 0
+                    && roomSessionRegistry.isOffline(roomId, user);
             roomSessionRegistry.add(roomId, user, sessionId);
+            roomSessionRegistry.clearOffline(roomId, user);
+            // 유예 중(연결 끊김)이던 사용자가 재구독하면 MEMBER_ONLINE 발행 (신규 입장은 발행하지 않음)
+            if (wasOffline) {
+                Room room = roomMapper.find(roomId);
+                if (room != null && roomMapper.members(roomId).contains(user)) {
+                    roomEventPublisher.roomEvent(RoomEventPublisher.ROOM_EVENT_ONLINE, room, user, null);
+                }
+            }
         }
     }
 

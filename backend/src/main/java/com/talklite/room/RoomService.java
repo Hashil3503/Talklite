@@ -3,6 +3,7 @@ package com.talklite.room;
 import com.talklite.chat.PermanentRoomChatRepository;
 import com.talklite.chat.RoomImageStorage;
 import com.talklite.realtime.RoomEventPublisher;
+import com.talklite.realtime.RoomSessionRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -37,6 +38,7 @@ public class RoomService {
     private final PermanentRoomBanRepository permanentRoomBanRepository;
     private final RoomCreationLogRepository roomCreationLogRepository;
     private final RoomImageStorage roomImageStorage;
+    private final RoomSessionRegistry roomSessionRegistry;
     public RoomService(StringRedisTemplate redis,
                    RoomMapper roomMapper,
                    @Qualifier("joinScript") DefaultRedisScript<Long> joinScript,
@@ -46,7 +48,8 @@ public class RoomService {
                    PermanentRoomChatRepository permanentRoomChatRepository,
                    PermanentRoomBanRepository permanentRoomBanRepository,
                    RoomCreationLogRepository roomCreationLogRepository,
-                   RoomImageStorage roomImageStorage) {
+                   RoomImageStorage roomImageStorage,
+                   RoomSessionRegistry roomSessionRegistry) {
         this.redis = redis;
         this.roomMapper = roomMapper;
         this.joinScript = joinScript;
@@ -57,6 +60,7 @@ public class RoomService {
         this.permanentRoomBanRepository = permanentRoomBanRepository;
         this.roomCreationLogRepository = roomCreationLogRepository;
         this.roomImageStorage = roomImageStorage;
+        this.roomSessionRegistry = roomSessionRegistry;
     }
 
 
@@ -107,7 +111,9 @@ public class RoomService {
         if (room == null) {
             throw new RoomNotFoundException(roomId);
         }
-        return RoomResponse.from(room, roomMapper.members(roomId), room.title(), roomMapper.voiceCount(roomId));
+        List<String> members = roomMapper.members(roomId);
+        return RoomResponse.from(room, members, room.title(), roomMapper.voiceCount(roomId),
+                roomSessionRegistry.offlineMembers(roomId, members));
     }
 
     public RoomResponse join(String roomId, String user) {
@@ -341,7 +347,9 @@ public class RoomService {
         // STOMP ROOM_UPDATED 전파 (방 + 로비)
         eventPublisher.publishRoomUpdated(updated, principal, finalTitle, newGame, newTags, newCapacity, updatedAt);
 
-        return RoomResponse.from(updated, roomMapper.members(roomId), finalTitle, roomMapper.voiceCount(roomId));
+        List<String> members = roomMapper.members(roomId);
+        return RoomResponse.from(updated, members, finalTitle, roomMapper.voiceCount(roomId),
+                roomSessionRegistry.offlineMembers(roomId, members));
     }
 
     private List<String> normalizeTags(List<String> tags) {

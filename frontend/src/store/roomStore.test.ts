@@ -122,3 +122,77 @@ describe('roomStore DEF-05 — MEMBER_KICKED 처리', () => {
     window.removeEventListener('talklite:kicked', onKicked)
   })
 })
+
+function roomEvent(type: string, actor: string, targetUser?: string): RoomEvent {
+  return {
+    type,
+    roomId: roomFixture.id,
+    actor,
+    targetUser,
+    memberCount: roomFixture.count,
+    capacity: roomFixture.capacity,
+    host: roomFixture.host,
+    voiceCount: 0,
+    timestamp: Date.now(),
+  }
+}
+
+describe('roomStore — offlineMembers (MEMBER_OFFLINE / MEMBER_ONLINE)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('talklite_uid', 'me-def05')
+    useRoomStore.setState({
+      currentRoom: roomFixture,
+      messages: [],
+      voiceMembers: [],
+      offlineMembers: ['host-def05'],
+      subscriptions: [],
+    })
+  })
+
+  afterEach(() => {
+    useRoomStore.setState({ currentRoom: null, messages: [], voiceMembers: [], offlineMembers: [], subscriptions: [] })
+    localStorage.clear()
+  })
+
+  it('setCurrentRoom 은 응답의 offlineMembers 로 초기화하고, 없으면 빈 배열이다', () => {
+    useRoomStore.getState().setCurrentRoom({ ...roomFixture, offlineMembers: ['host-def05'] })
+    expect(useRoomStore.getState().offlineMembers).toEqual(['host-def05'])
+
+    useRoomStore.getState().setCurrentRoom({ ...roomFixture })
+    expect(useRoomStore.getState().offlineMembers).toEqual([])
+
+    useRoomStore.getState().setCurrentRoom(null)
+    expect(useRoomStore.getState().offlineMembers).toEqual([])
+  })
+
+  it('MEMBER_OFFLINE 은 actor 를, MEMBER_ONLINE 은 actor 를 제거한다', () => {
+    useRoomStore.getState().updateRoomEvent(roomEvent('MEMBER_OFFLINE', 'me-def05'))
+    expect(useRoomStore.getState().offlineMembers).toEqual(['host-def05', 'me-def05'])
+
+    // 중복 OFFLINE 은 한 번만 반영
+    useRoomStore.getState().updateRoomEvent(roomEvent('MEMBER_OFFLINE', 'me-def05'))
+    expect(useRoomStore.getState().offlineMembers).toEqual(['host-def05', 'me-def05'])
+
+    useRoomStore.getState().updateRoomEvent(roomEvent('MEMBER_ONLINE', 'me-def05'))
+    expect(useRoomStore.getState().offlineMembers).toEqual(['host-def05'])
+  })
+
+  it('MEMBER_LEAVE 는 actor 를, MEMBER_KICKED 는 targetUser 를 offlineMembers 에서 제거한다', () => {
+    useRoomStore.getState().updateRoomEvent(roomEvent('MEMBER_LEAVE', 'host-def05'))
+    expect(useRoomStore.getState().offlineMembers).toEqual([])
+
+    useRoomStore.setState({ offlineMembers: ['host-def05', 'other-def05'] })
+    useRoomStore.getState().updateRoomEvent(roomEvent('MEMBER_KICKED', 'host-def05', 'other-def05'))
+    expect(useRoomStore.getState().offlineMembers).toEqual(['host-def05'])
+  })
+
+  it('방 파괴/강퇴로 방을 떠나면 offlineMembers 도 초기화된다', () => {
+    useRoomStore.getState().updateRoomEvent(roomEvent('ROOM_DESTROYED', 'host-def05'))
+    expect(useRoomStore.getState().offlineMembers).toEqual([])
+
+    useRoomStore.setState({ currentRoom: roomFixture, offlineMembers: ['host-def05'] })
+    useRoomStore.getState().updateRoomEvent(kickedEvent('me-def05'))
+    expect(useRoomStore.getState().offlineMembers).toEqual([])
+  })
+})

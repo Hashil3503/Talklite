@@ -1,5 +1,6 @@
 package com.talklite.search;
 
+import com.talklite.realtime.RoomSessionRegistry;
 import com.talklite.room.GameAliases;
 import com.talklite.room.Room;
 import com.talklite.room.RoomMapper;
@@ -28,10 +29,13 @@ public class SearchService {
 
     private final StringRedisTemplate redis;
     private final RoomMapper roomMapper;
+    private final RoomSessionRegistry roomSessionRegistry;
 
-    public SearchService(StringRedisTemplate redis, RoomMapper roomMapper) {
+    public SearchService(StringRedisTemplate redis, RoomMapper roomMapper,
+                         RoomSessionRegistry roomSessionRegistry) {
         this.redis = redis;
         this.roomMapper = roomMapper;
+        this.roomSessionRegistry = roomSessionRegistry;
     }
 
     /** P0-05: 3x2 복합 정렬 검색 엔진. sort=latest|title|members, order=asc|desc, 기본값 latest/desc */
@@ -79,7 +83,9 @@ public class SearchService {
         return rooms.stream()
                 .sorted(primary.thenComparing(secondary))
                 .limit(LIMIT)
-                .map(room -> RoomResponse.from(room, membersByRoom.get(room.id()), room.title(), roomMapper.voiceCount(room.id())))
+                .map(room -> RoomResponse.from(room, membersByRoom.get(room.id()), room.title(),
+                        roomMapper.voiceCount(room.id()),
+                        roomSessionRegistry.offlineMembers(room.id(), membersByRoom.get(room.id()))))
                 .toList();
     }
 

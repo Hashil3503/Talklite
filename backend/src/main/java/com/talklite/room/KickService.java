@@ -1,7 +1,10 @@
 package com.talklite.room;
 
 import com.talklite.realtime.RoomEventPublisher;
+import com.talklite.realtime.RoomSessionRegistry;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 import static com.talklite.realtime.RoomEventPublisher.LOBBY_ROOM_UPDATE;
 import static com.talklite.realtime.RoomEventPublisher.ROOM_EVENT_KICKED;
@@ -12,12 +15,15 @@ public class KickService {
     private final RoomMapper roomMapper;
     private final RoomEventPublisher eventPublisher;
     private final PermanentRoomBanRepository permanentRoomBanRepository;
+    private final RoomSessionRegistry roomSessionRegistry;
 
     public KickService(RoomMapper roomMapper, RoomEventPublisher eventPublisher,
-                       PermanentRoomBanRepository permanentRoomBanRepository) {
+                       PermanentRoomBanRepository permanentRoomBanRepository,
+                       RoomSessionRegistry roomSessionRegistry) {
         this.roomMapper = roomMapper;
         this.eventPublisher = eventPublisher;
         this.permanentRoomBanRepository = permanentRoomBanRepository;
+        this.roomSessionRegistry = roomSessionRegistry;
     }
 
     public RoomResponse kick(String roomId, KickRequest request, String principal) {
@@ -66,6 +72,8 @@ public class KickService {
 
     private RoomResponse read(String roomId) {
         Room room = roomMapper.find(roomId);
-        return RoomResponse.from(room, roomMapper.members(roomId), null, roomMapper.voiceCount(roomId));
+        List<String> members = roomMapper.members(roomId);
+        return RoomResponse.from(room, members, null, roomMapper.voiceCount(roomId),
+                roomSessionRegistry.offlineMembers(roomId, members));
     }
 }

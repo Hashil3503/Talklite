@@ -19,6 +19,8 @@ public class RoomEventPublisher {
     public static final String ROOM_EVENT_KICKED = "MEMBER_KICKED";
     public static final String ROOM_EVENT_VOICE = "VOICE_STATUS_CHANGED";
     public static final String ROOM_EVENT_DESTROYED = "ROOM_DESTROYED";
+    public static final String ROOM_EVENT_OFFLINE = "MEMBER_OFFLINE";
+    public static final String ROOM_EVENT_ONLINE = "MEMBER_ONLINE";
     public static final String ROOM_EVENT_UPDATED = "ROOM_UPDATED";
     public static final String LOBBY_ROOM_UPDATE = "ROOM_UPDATE";
     public static final String LOBBY_VOICE_BADGE = "VOICE_BADGE_UPDATE";

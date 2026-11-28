@@ -16,6 +16,7 @@ export interface RoomResponse {
   count: number
   voiceCount?: number
   members: string[]
+  offlineMembers?: string[]
 }
 
 export type SearchField = 'all' | 'game' | 'title' | 'tag'

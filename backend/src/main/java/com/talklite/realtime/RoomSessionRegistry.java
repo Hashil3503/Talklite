@@ -2,6 +2,7 @@ package com.talklite.realtime;
 
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,6 +19,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RoomSessionRegistry {
 
     private final Map<String, Set<String>> sessionsByRoomAndUser = new ConcurrentHashMap<>();
+    /** 유예 시간(연결 끊김) 중인 (roomId, user) — MEMBER_OFFLINE 발행 후 grace 종료 시 해제 */
+    private final Set<String> offline = ConcurrentHashMap.newKeySet();
 
     private String key(String roomId, String user) {
         return roomId + "\u0000" + user;
@@ -42,5 +45,24 @@ public class RoomSessionRegistry {
     public int count(String roomId, String user) {
         Set<String> ids = sessionsByRoomAndUser.get(key(roomId, user));
         return ids == null ? 0 : ids.size();
+    }
+
+    /** 유예 중 표시 (이미 표시되어 있었다면 false) */
+    public boolean markOffline(String roomId, String user) {
+        return offline.add(key(roomId, user));
+    }
+
+    public boolean isOffline(String roomId, String user) {
+        return offline.contains(key(roomId, user));
+    }
+
+    /** 유예 종료/재구독/퇴장 시 유예 표시 해제 */
+    public void clearOffline(String roomId, String user) {
+        offline.remove(key(roomId, user));
+    }
+
+    /** 주어진 멤버 중 live 세션이 하나도 없는(유예 중이거나 아직 미구독) 사용자 목록 */
+    public List<String> offlineMembers(String roomId, List<String> members) {
+        return members.stream().filter(member -> count(roomId, member) == 0).toList();
     }
 }

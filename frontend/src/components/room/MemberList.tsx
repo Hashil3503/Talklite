@@ -8,6 +8,7 @@ import { useToastStore } from '../../store/toastStore'
 export const MemberList: React.FC<{ roomId: string }> = ({ roomId }) => {
   const currentRoom = useRoomStore((state) => state.currentRoom)
   const voiceMembers = useRoomStore((state) => state.voiceMembers)
+  const offlineMembers = useRoomStore((state) => state.offlineMembers)
   const speaking = useVoiceStore((state) => state.speakingUsers)
   const peerVolumes = useVoiceStore((state) => state.peerVolumes)
   const peerMutes = useVoiceStore((state) => state.peerMutes)
@@ -71,6 +72,7 @@ export const MemberList: React.FC<{ roomId: string }> = ({ roomId }) => {
         {currentRoom.members.map((member) => {
           const isMemberHost = member === currentRoom.host
           const isMe = member === currentUserId
+          const isOffline = !isMe && offlineMembers.includes(member)
           const inVoice = voiceMembers.includes(member)
           const isTalking = !!speaking[member]
           const isPeerMuted = !!peerMutes[member]
@@ -78,13 +80,13 @@ export const MemberList: React.FC<{ roomId: string }> = ({ roomId }) => {
           const volPercent = Math.round((isPeerMuted ? 0 : vol) * 100)
           const isOpen = openPeer === member
           const avatarChar = member.charAt(0).toUpperCase() || '?'
-          const subStatus = inVoice ? (isTalking ? '발화 중' : '음성 연결됨') : '음성 미연결'
+          const subStatus = isOffline ? '연결 끊김' : inVoice ? (isTalking ? '발화 중' : '음성 연결됨') : '음성 미연결'
 
           return (
             <div
               key={member}
               data-peer-card={member}
-              className={`member-item ${isTalking && inVoice ? 'speaking' : ''}`}
+              className={`member-item ${isTalking && inVoice ? 'speaking' : ''} ${isOffline ? 'member-offline' : ''}`}
             >
               <div className="member-avatar-wrap">
                 <div className={`avatar-box ${isMemberHost ? 'avatar-host' : ''}`}>{avatarChar}</div>

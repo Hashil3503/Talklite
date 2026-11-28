@@ -24,6 +24,7 @@ import java.util.Set;
  *
  * T-H4: 연결이 끊긴 사용자를 곧바로 방에서 내보내지 않고 유예 시간(DISCONNECT_GRACE_SECONDS) 뒤에
  * 해당 방을 구독 중인 live 세션이 하나도 없을 때만 일반 퇴장(RoomService.leave)과 동일하게 처리한다.
+ * 유예 중인 사용자는 MEMBER_OFFLINE(복귀 시 MEMBER_ONLINE) 이벤트로 실시간 알린다.
  */
 @Component
 public class PresenceEventListener {
@@ -31,7 +32,7 @@ public class PresenceEventListener {
     private static final Logger log = LoggerFactory.getLogger(PresenceEventListener.class);
 
     /** 새로고침/재연결 유예 시간(초). 테스트에서는 프로퍼티로 단축한다. */
-    public static final long DISCONNECT_GRACE_SECONDS = 30;
+    public static final long DISCONNECT_GRACE_SECONDS = 10;
 
     private final RoomMapper roomMapper;
     private final RoomEventPublisher eventPublisher;
@@ -107,6 +108,14 @@ public class PresenceEventListener {
         }
 
         for (String tracked : trackedRooms) {
+            // 유예 중인 사용자를 방 참여자에게 "연결 끊김"으로 표시 (복귀 시 MEMBER_ONLINE)
+            Room trackedRoom = roomMapper.find(tracked);
+            if (trackedRoom != null
+                    && roomSessionRegistry.count(tracked, user) == 0
+                    && roomMapper.members(tracked).contains(user)
+                    && roomSessionRegistry.markOffline(tracked, user)) {
+                eventPublisher.roomEvent(RoomEventPublisher.ROOM_EVENT_OFFLINE, trackedRoom, user, null);
+            }
             scheduleMembershipCheck(tracked, user);
         }
     }
@@ -129,6 +138,7 @@ public class PresenceEventListener {
                 if (roomSessionRegistry.count(roomId, user) > 0) {
                     return; // 유예 시간 내 재접속/재구독 → 아무것도 하지 않음
                 }
+                roomSessionRegistry.clearOffline(roomId, user);
                 Room room = roomMapper.find(roomId);
                 if (room == null || !roomMapper.members(roomId).contains(user)) {
                     return; // 방이 이미 사라졌거나 사용자가 이미 퇴장함

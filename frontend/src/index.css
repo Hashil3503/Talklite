@@ -732,6 +732,10 @@ body {
   border-color: var(--brand-green);
   box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
 }
+/* 유예 시간(연결 끊김) 동안 참여자를 흐리게 표시 */
+.member-item.member-offline {
+  opacity: 0.5;
+}
 .member-avatar-wrap {
   position: relative;
 }
