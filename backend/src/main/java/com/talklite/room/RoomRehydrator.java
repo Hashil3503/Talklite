@@ -13,10 +13,14 @@ import org.springframework.stereotype.Component;
 public class RoomRehydrator {
 
     private final PermanentRoomRepository repository;
+    private final PermanentRoomBanRepository banRepository;
     private final RoomMapper roomMapper;
 
-    public RoomRehydrator(PermanentRoomRepository repository, RoomMapper roomMapper) {
+    public RoomRehydrator(PermanentRoomRepository repository,
+                          PermanentRoomBanRepository banRepository,
+                          RoomMapper roomMapper) {
         this.repository = repository;
+        this.banRepository = banRepository;
         this.roomMapper = roomMapper;
     }
 
@@ -24,6 +28,10 @@ public class RoomRehydrator {
     public void rehydrate() {
         for (Room room : repository.findAll()) {
             roomMapper.restore(room);
+            // 영구 강퇴 목록도 함께 복원 (Redis는 재기동 시 비어 있음)
+            for (String bannedUser : banRepository.findByRoomId(room.id())) {
+                roomMapper.permanentBan(room.id(), bannedUser);
+            }
         }
     }
 }

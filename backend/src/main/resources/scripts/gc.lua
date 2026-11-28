@@ -8,7 +8,7 @@
 -- KEYS[6]: room:{id}:invite
 -- KEYS[7]: room:{id}:messages (채팅 대화 내역 캐시 List)
 -- ARGV[1]: roomId
--- ARGV[2]: game
+-- ARGV[2]: game (T-M9: 게임 역색인 제거로 미사용, 인자 위치 호환 유지)
 -- ARGV[3..]: tags
 --
 -- 반환 코드:
@@ -25,8 +25,7 @@ if code then
     redis.call('DEL', 'invite:' .. code)
 end
 
--- 게임명/태그 역색인에서 제거 (소문자 정규화, RoomMapper.gameIndexKey 규약과 일치)
-redis.call('SREM', 'game:' .. string.lower(ARGV[2]) .. ':rooms', ARGV[1])
+-- 태그 역색인에서 제거 (소문자 정규화, RoomMapper.tagIndexKey 규약과 일치)
 for i = 3, #ARGV do
     if #ARGV[i] > 0 then
         redis.call('SREM', 'tag:' .. string.lower(ARGV[i]) .. ':rooms', ARGV[1])

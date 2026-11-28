@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS permanent_room_chat (
     INDEX idx_room_created (room_id, created_at)
 );
 
+CREATE TABLE IF NOT EXISTS permanent_room_ban (
+    room_id    VARCHAR(36) NOT NULL,
+    user_id    VARCHAR(64) NOT NULL,
+    created_at BIGINT      NOT NULL,
+    PRIMARY KEY (room_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS user_credential (
     uid         VARCHAR(64) NOT NULL PRIMARY KEY,
     secret_hash CHAR(64)    NOT NULL,

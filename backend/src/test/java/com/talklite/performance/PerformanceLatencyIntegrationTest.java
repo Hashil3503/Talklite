@@ -59,7 +59,7 @@ public class PerformanceLatencyIntegrationTest extends IntegrationTestCleanup {
     }
 
     @Test
-    @DisplayName("NFR-PERF-01 & NFR-PERF-03: 500개 병렬 동시 Join 요청 시 정원 원자성 보장 및 99% 응답 지연 <= 200ms 검증")
+    @DisplayName("NFR-PERF-01 & NFR-PERF-03: 500개 병렬 동시 Join 요청 시 정원 원자성 보장 및 평균 응답 지연 < 200ms, p95 < 500ms 검증")
     void concurrent500JoinRequestsLatencyAndCapacityGuard() throws Exception {
         int capacity = 6;
         int totalRequests = 500;

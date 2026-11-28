@@ -9,7 +9,8 @@ import java.time.Duration;
 @Service
 public class InviteService {
 
-    private static final String CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    // 혼동 문자 제외: I, O, 0, 1, L
+    private static final String CODE_CHARSET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final StringRedisTemplate redis;

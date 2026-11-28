@@ -25,7 +25,6 @@ if memberCount > newCapacity or voiceCount > newCapacity then
     return -2 -- ERR_CAPACITY_CONFLICT
 end
 
-local oldGame = redis.call('HGET', KEYS[1], 'game')
 local oldTagsStr = redis.call('HGET', KEYS[1], 'tags')
 local scope = redis.call('HGET', KEYS[1], 'scope')
 
@@ -50,24 +49,6 @@ local newTags = splitTags(ARGV[5])
 
 -- PUBLIC 방만 역색인 관리 (PRIVATE는 검색 노출 안됨)
 if scope == 'PUBLIC' then
-    -- game 재색인
-    if oldGame then
-        local oldLower = string.lower(oldGame)
-        local newLower = string.lower(ARGV[3])
-        if oldLower ~= newLower then
-            if #oldLower > 0 then
-                redis.call('SREM', 'game:' .. oldLower .. ':rooms', ARGV[1])
-            end
-            if #newLower > 0 then
-                redis.call('SADD', 'game:' .. newLower .. ':rooms', ARGV[1])
-            end
-        end
-    else
-        if ARGV[3] and #ARGV[3] > 0 then
-            redis.call('SADD', 'game:' .. string.lower(ARGV[3]) .. ':rooms', ARGV[1])
-        end
-    end
-
     -- tag 재색인: old 중 new에 없는 것 SREM, new 중 old에 없는 것 SADD
     for tag, _ in pairs(oldTags) do
         if not newTags[tag] then

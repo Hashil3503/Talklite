@@ -110,7 +110,6 @@ public class RoomGcIntegrationTest extends IntegrationTestCleanup {
         // 3) Redis 키 소멸 + 역색인 SREM
         assertEquals(false, Boolean.TRUE.equals(redis.hasKey("room:" + roomId + ":meta")), "메타 키 파기");
         assertEquals(false, Boolean.TRUE.equals(redis.hasKey("room:" + roomId + ":members")), "멤버 키 파기");
-        assertEquals(false, Boolean.TRUE.equals(redis.opsForSet().isMember("game:gc game a:rooms", roomId)), "게임 역색인 SREM");
         assertEquals(false, Boolean.TRUE.equals(redis.opsForSet().isMember("tag:gc-alpha:rooms", roomId)), "태그 역색인 SREM");
         // 파기 후 재입장은 고아 키를 만들지 않아야 한다 (join.lua EXISTS 가드)
         assertEquals(false, Boolean.TRUE.equals(redis.hasKey("room:" + roomId + ":members")), "파기 후 고아 키 부재");

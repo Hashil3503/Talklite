@@ -32,6 +32,7 @@ public abstract class IntegrationTestCleanup {
     }
 
     private void clean() {
+        jdbc.sql("DELETE FROM permanent_room_ban").update();
         jdbc.sql("DELETE FROM permanent_room").update();
         jdbc.sql("DELETE FROM permanent_room_chat").update();
         jdbc.sql("DELETE FROM room_creation_log").update();

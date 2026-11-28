@@ -11,10 +11,13 @@ public class KickService {
 
     private final RoomMapper roomMapper;
     private final RoomEventPublisher eventPublisher;
+    private final PermanentRoomBanRepository permanentRoomBanRepository;
 
-    public KickService(RoomMapper roomMapper, RoomEventPublisher eventPublisher) {
+    public KickService(RoomMapper roomMapper, RoomEventPublisher eventPublisher,
+                       PermanentRoomBanRepository permanentRoomBanRepository) {
         this.roomMapper = roomMapper;
         this.eventPublisher = eventPublisher;
+        this.permanentRoomBanRepository = permanentRoomBanRepository;
     }
 
     public RoomResponse kick(String roomId, KickRequest request, String principal) {
@@ -37,9 +40,14 @@ public class KickService {
             throw new InvalidKickException();
         }
         if (request.type() == KickType.TEMPORARY) {
+            // 임시 강퇴는 Redis TTL 키만 사용 (영구 방이라도 DB 영속화하지 않는다)
             roomMapper.temporaryBan(roomId, request.targetUser());
         } else {
             roomMapper.permanentBan(roomId, request.targetUser());
+            if (room.type() == RoomType.PERMANENT) {
+                // 영구 방의 영구 강퇴는 재기동 후에도 유지되어야 하므로 MariaDB에 영속화
+                permanentRoomBanRepository.save(roomId, request.targetUser());
+            }
         }
         roomMapper.removeMember(roomId, request.targetUser());
         roomMapper.removeVoice(roomId, request.targetUser());

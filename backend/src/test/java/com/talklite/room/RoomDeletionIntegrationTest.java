@@ -59,7 +59,6 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
             for (String key : redis.keys("room:" + roomId + ":banned:*")) {
                 redis.delete(key);
             }
-            redis.opsForSet().remove("game:overwatch:rooms", roomId);
             redis.opsForSet().remove("tag:competitive:rooms", roomId);
             redis.opsForSet().remove("tag:tier-gold:rooms", roomId);
         }
@@ -91,7 +90,7 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
         // 생성 직후 DB 및 Redis 검증
         assertTrue(permanentRoomRepository.findById(roomId).isPresent(), "MariaDB에 영구 방이 저장되어 있어야 함");
         assertEquals(Boolean.TRUE, redis.hasKey("room:" + roomId + ":meta"), "Redis meta 키가 존재해야 함");
-        assertTrue(redis.opsForSet().isMember("game:overwatch:rooms", roomId), "game 역색인에 포함되어야 함");
+        assertTrue(redis.opsForSet().isMember("tag:competitive:rooms", roomId), "tag 역색인에 포함되어야 함");
 
         // 2. 방장 권한으로 DELETE /api/rooms/{id} 요청
         DeleteRoomRequest deleteRequest = new DeleteRoomRequest("host-admin");
@@ -105,7 +104,6 @@ public class RoomDeletionIntegrationTest extends IntegrationTestCleanup {
         assertTrue(permanentRoomRepository.findById(roomId).isEmpty(), "MariaDB에서 영구 방 레코드가 완전히 삭제되어야 함");
         assertEquals(Boolean.FALSE, redis.hasKey("room:" + roomId + ":meta"), "Redis meta 키가 삭제되어야 함");
         assertEquals(Boolean.FALSE, redis.hasKey("room:" + roomId + ":members"), "Redis members 키가 삭제되어야 함");
-        assertFalse(redis.opsForSet().isMember("game:overwatch:rooms", roomId), "game 역색인에서 제거되어야 함");
         assertFalse(redis.opsForSet().isMember("tag:competitive:rooms", roomId), "tag 역색인에서 제거되어야 함");
 
         // 4. GET /api/rooms/{id} 조회 시 404 확인

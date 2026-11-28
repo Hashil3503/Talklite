@@ -103,7 +103,6 @@ public class PermanentRoomPersistenceIntegrationTest extends IntegrationTestClea
 
         redis.delete("room:" + roomId + ":meta");
         redis.delete("room:" + roomId + ":members");
-        redis.opsForSet().remove("game:starcraft:rooms", roomId);
         redis.opsForSet().remove("tag:clan:rooms", roomId);
 
         roomRehydrator.rehydrate();
@@ -144,7 +143,6 @@ public class PermanentRoomPersistenceIntegrationTest extends IntegrationTestClea
         assertEquals("캐주얼 즐겜 방", savedInDb.get().title(), "MariaDB에 title이 저장되어야 함");
 
         redis.delete("room:" + id + ":meta");
-        redis.opsForSet().remove("game:apex legends:rooms", id);
         redis.opsForSet().remove("tag:casual:rooms", id);
 
         roomRehydrator.rehydrate();

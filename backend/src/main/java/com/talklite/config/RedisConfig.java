@@ -43,12 +43,8 @@ public class RedisConfig {
     @Bean
     public DefaultRedisScript<Long> updateScript() {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
-        // spec path is lua/update_room.lua, fallback to scripts/update_room.lua
-        ClassPathResource lua = new ClassPathResource("lua/update_room.lua");
-        if (!lua.exists()) {
-            lua = new ClassPathResource("scripts/update_room.lua");
-        }
-        script.setLocation(lua);
+        // spec path is lua/update_room.lua
+        script.setLocation(new ClassPathResource("lua/update_room.lua"));
         script.setResultType(Long.class);
         return script;
     }

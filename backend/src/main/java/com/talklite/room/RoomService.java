@@ -1,6 +1,7 @@
 package com.talklite.room;
 
 import com.talklite.chat.PermanentRoomChatRepository;
+import com.talklite.chat.RoomImageStorage;
 import com.talklite.realtime.RoomEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,8 +34,9 @@ public class RoomService {
     private final RoomEventPublisher eventPublisher;
     private final PermanentRoomRepository permanentRoomRepository;
     private final PermanentRoomChatRepository permanentRoomChatRepository;
+    private final PermanentRoomBanRepository permanentRoomBanRepository;
     private final RoomCreationLogRepository roomCreationLogRepository;
-
+    private final RoomImageStorage roomImageStorage;
     public RoomService(StringRedisTemplate redis,
                    RoomMapper roomMapper,
                    @Qualifier("joinScript") DefaultRedisScript<Long> joinScript,
@@ -42,7 +44,9 @@ public class RoomService {
                    RoomEventPublisher eventPublisher,
                    PermanentRoomRepository permanentRoomRepository,
                    PermanentRoomChatRepository permanentRoomChatRepository,
-                   RoomCreationLogRepository roomCreationLogRepository) {
+                   PermanentRoomBanRepository permanentRoomBanRepository,
+                   RoomCreationLogRepository roomCreationLogRepository,
+                   RoomImageStorage roomImageStorage) {
         this.redis = redis;
         this.roomMapper = roomMapper;
         this.joinScript = joinScript;
@@ -50,7 +54,9 @@ public class RoomService {
         this.eventPublisher = eventPublisher;
         this.permanentRoomRepository = permanentRoomRepository;
         this.permanentRoomChatRepository = permanentRoomChatRepository;
+        this.permanentRoomBanRepository = permanentRoomBanRepository;
         this.roomCreationLogRepository = roomCreationLogRepository;
+        this.roomImageStorage = roomImageStorage;
     }
 
 
@@ -200,6 +206,8 @@ public class RoomService {
         if (room.type() == RoomType.TEMPORARY) {
             boolean removed = roomMapper.deleteRoom(roomId, room);
             if (removed) {
+                // T-M14: 방 파기 시 업로드 이미지 디렉터리 정리 (실패는 로그만)
+                roomImageStorage.deleteRoomImages(roomId);
                 eventPublisher.publishRoomRemoved(room);
                 return RoomResponse.from(room, List.of(), room.title());
             }
@@ -222,9 +230,13 @@ public class RoomService {
         }
         if (room.type() == RoomType.PERMANENT) {
             permanentRoomRepository.delete(roomId);
+            // T-H6: 영구 강퇴 목록도 함께 소멸
+            permanentRoomBanRepository.deleteByRoomId(roomId);
         }
         permanentRoomChatRepository.deleteByRoomId(roomId);
         roomMapper.destroyRoom(roomId, room);
+        // T-M14: 방 파기 시 업로드 이미지 디렉터리 정리 (실패는 로그만)
+        roomImageStorage.deleteRoomImages(roomId);
         eventPublisher.publishRoomDestroyed(room, actor);
         eventPublisher.publishRoomRemoved(room);
     }

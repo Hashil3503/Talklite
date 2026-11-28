@@ -26,7 +26,6 @@ public class RoomMapper {
     public static final String VOICE_KEY_PREFIX = "room:%s:voice";
     public static final String CHAT_MESSAGES_KEY_PREFIX = "room:%s:messages";
     public static final String TAG_INDEX_PREFIX = "tag:%s:rooms";
-    public static final String GAME_INDEX_PREFIX = "game:%s:rooms";
     public static final String INVITE_KEY_PREFIX = "invite:%s";
     public static final String ROOM_INVITE_KEY_PREFIX = "room:%s:invite";
     public static final long TEMPORARY_BAN_TTL_SECONDS = 600;
@@ -107,15 +106,7 @@ public class RoomMapper {
         return TAG_INDEX_PREFIX.formatted(normalizeTag(tag));
     }
 
-    public String gameIndexKey(String game) {
-        return GAME_INDEX_PREFIX.formatted(normalizeGame(game));
-    }
-
     private String normalizeTag(String raw) {
-        return raw == null ? "" : raw.trim().toLowerCase();
-    }
-
-    private String normalizeGame(String raw) {
         return raw == null ? "" : raw.trim().toLowerCase();
     }
 
@@ -134,7 +125,6 @@ public class RoomMapper {
         recordJoinTime(room.id(), room.host(), room.createdAt());
         if (room.scope() == RoomScope.PUBLIC) {
             room.tags().forEach(tag -> redis.opsForSet().add(tagIndexKey(tag), room.id()));
-            redis.opsForSet().add(gameIndexKey(room.game()), room.id());
         }
     }
 
@@ -151,7 +141,6 @@ public class RoomMapper {
         hash.put("createdAt", String.valueOf(room.createdAt()));
         redis.opsForHash().putAll(metaKey(room.id()), hash);
         if (room.scope() == RoomScope.PUBLIC) {
-            redis.opsForSet().add(gameIndexKey(room.game()), room.id());
             room.tags().forEach(tag -> redis.opsForSet().add(tagIndexKey(tag), room.id()));
         }
     }

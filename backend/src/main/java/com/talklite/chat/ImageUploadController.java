@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
@@ -31,9 +30,11 @@ public class ImageUploadController {
     );
 
     private final RoomMapper roomMapper;
+    private final RoomImageStorage roomImageStorage;
 
-    public ImageUploadController(RoomMapper roomMapper) {
+    public ImageUploadController(RoomMapper roomMapper, RoomImageStorage roomImageStorage) {
         this.roomMapper = roomMapper;
+        this.roomImageStorage = roomImageStorage;
     }
 
     @PostMapping("/{roomId}/images")
@@ -63,15 +64,18 @@ public class ImageUploadController {
         }
 
         String filename = UUID.randomUUID() + ext;
-        Path dir = Path.of("uploads", "images").toAbsolutePath().normalize();
+        // T-M14: 방별 하위 디렉터리에 저장 → 방 파기 시 디렉터리 단위 삭제 가능
+        if (!RoomImageStorage.isSafeRoomId(roomId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "invalid_path"));
+        }
         try {
-            Files.createDirectories(dir);
+            Path dir = roomImageStorage.ensureRoomDirectory(roomId);
             Path target = dir.resolve(filename).normalize();
             if (!target.startsWith(dir)) {
                 return ResponseEntity.badRequest().body(Map.of("error", "invalid_path"));
             }
             file.transferTo(target.toFile());
-            String url = "/api/images/" + filename;
+            String url = "/api/images/" + roomId + "/" + filename;
             return ResponseEntity.ok(Map.of("url", url, "mediaUrl", url));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "io_error"));

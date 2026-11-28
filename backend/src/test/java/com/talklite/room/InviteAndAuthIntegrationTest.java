@@ -74,7 +74,7 @@ public class InviteAndAuthIntegrationTest extends IntegrationTestCleanup {
         JsonNode node = objectMapper.readTree(inviteJson);
         String code = node.get("code").asText();
         assertNotNull(code);
-        assertTrue(code.matches("[A-Z2-9]{6}"));
+        assertTrue(code.matches("[A-HJ-KMNP-Z2-9]{6}"), "혼동 문자(I, O, 0, 1, L) 제외 문자셋");
     }
 
     @Test

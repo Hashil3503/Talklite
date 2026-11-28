@@ -10,8 +10,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -134,15 +137,38 @@ public class ChatService {
 
     /**
      * 최근 대화 내역 조회 (입장/새로고침 시 복원용).
-     * Redis 캐시 우선 → 미존재 시 MariaDB 폴백. 반환은 과거순(오래된 순).
+     * Redis 캐시 우선 → 캐시가 요청 건수보다 부족하면 MariaDB 내역으로 보충(T-H6) → 과거순 병합.
+     * 임시 방(TEMPORARY)은 기존과 동일하게 캐시만 사용한다.
      */
     public List<ChatMessage> recentMessages(String roomId, int limit) {
         int safeLimit = Math.max(1, Math.min(limit, MAX_MESSAGE_LIMIT));
         List<ChatMessage> cached = readFromRedisCache(roomId, safeLimit);
-        if (!cached.isEmpty()) {
+        var room = roomMapper.find(roomId);
+        if (room == null || room.type() != RoomType.PERMANENT) {
+            if (!cached.isEmpty()) {
+                return cached;
+            }
+            return List.of();
+        }
+        if (cached.size() >= safeLimit) {
             return cached;
         }
-        return permanentRoomChatRepository.findRecentMessages(roomId, safeLimit);
+        List<ChatMessage> persisted = permanentRoomChatRepository.findRecentMessages(roomId, safeLimit);
+        if (persisted.isEmpty()) {
+            return cached;
+        }
+        // 캐시(최신) + DB(과거) 병합: messageId 기준 중복 제거 후 오래된 순 정렬, 최신 safeLimit건 반환
+        Map<String, ChatMessage> merged = new LinkedHashMap<>();
+        for (ChatMessage message : persisted) {
+            merged.putIfAbsent(message.messageId(), message);
+        }
+        for (ChatMessage message : cached) {
+            merged.put(message.messageId(), message);
+        }
+        List<ChatMessage> ordered = new ArrayList<>(merged.values());
+        ordered.sort(Comparator.comparingLong(ChatMessage::timestamp));
+        int fromIndex = Math.max(0, ordered.size() - safeLimit);
+        return ordered.subList(fromIndex, ordered.size());
     }
 
     private void persist(String roomId, ChatMessage message) {
