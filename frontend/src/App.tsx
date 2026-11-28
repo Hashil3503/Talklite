@@ -88,6 +88,14 @@ export function App() {
 
   // JOIN_ROOM (LOBBY -> ROOM, WebRTC/STOMP 세션 유지)
   const handleJoinRoom = (roomId: string) => {
+    const previousRoomId = currentRoomId
+    if (previousRoomId && previousRoomId !== roomId) {
+      // 다른 방으로 갈아타면 이전 방에서 바로 나간다 (같은 연결이 살아 있어 T-H4 유예 퇴장이 동작하지 않음)
+      useVoiceStore.getState().leaveVoice(true)
+      void leaveRoom(previousRoomId, getStoredUid()).catch(() => {
+        // 이미 소멸된 방은 무시
+      })
+    }
     setCurrentRoomId(roomId)
     setActiveView('ROOM')
     syncUrl(roomId)
