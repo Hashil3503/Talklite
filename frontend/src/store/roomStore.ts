@@ -347,11 +347,17 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         },
       })
     } else if (event.type === 'HOST_MIGRATED' || event.type === 'MEMBER_KICKED') {
+      // 강퇴된 사람은 목록에서도 바로 뺀다 (인원 수만 줄고 목록에 남던 문제)
+      const members =
+        event.type === 'MEMBER_KICKED' && event.targetUser
+          ? currentRoom.members.filter((m) => m !== event.targetUser)
+          : currentRoom.members
       set({
         currentRoom: {
           ...currentRoom,
           count: event.memberCount,
           host: event.host,
+          members,
         },
       })
     } else if (event.type === 'VOICE_STATUS_CHANGED') {

@@ -187,6 +187,12 @@ describe('roomStore — offlineMembers (MEMBER_OFFLINE / MEMBER_ONLINE)', () => 
     expect(useRoomStore.getState().offlineMembers).toEqual(['host-def05'])
   })
 
+  it('다른 사람이 강퇴되면 멤버 목록에서 바로 빠진다', () => {
+    useRoomStore.setState({ currentRoom: { ...roomFixture, members: ['host-def05', 'me-def05', 'other-def05'] } })
+    useRoomStore.getState().updateRoomEvent(roomEvent('MEMBER_KICKED', 'host-def05', 'other-def05'))
+    expect(useRoomStore.getState().currentRoom?.members).toEqual(['host-def05', 'me-def05'])
+  })
+
   it('방 파괴/강퇴로 방을 떠나면 offlineMembers 도 초기화된다', () => {
     useRoomStore.getState().updateRoomEvent(roomEvent('ROOM_DESTROYED', 'host-def05'))
     expect(useRoomStore.getState().offlineMembers).toEqual([])
