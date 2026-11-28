@@ -8,6 +8,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -274,6 +275,24 @@ public class RoomMapper {
                 ),
                 args.toArray());
         deleteByScan("room:" + roomId + ":banned:*");
+    }
+
+    /** 모든 방 ID — Non-blocking SCAN 기반 room:*:meta 조회 */
+    public List<String> roomIds() {
+        return redis.execute((RedisCallback<List<String>>) conn -> {
+            ScanOptions options = ScanOptions.scanOptions()
+                    .match(META_KEY_PREFIX.formatted("*"))
+                    .count(100)
+                    .build();
+            List<String> ids = new ArrayList<>();
+            try (Cursor<byte[]> cursor = conn.scan(options)) {
+                while (cursor.hasNext()) {
+                    String key = new String(cursor.next(), StandardCharsets.UTF_8);
+                    ids.add(key.substring("room:".length(), key.length() - ":meta".length()));
+                }
+            }
+            return ids;
+        });
     }
 
     /** Non-blocking SCAN 기반 패턴 키 삭제 (임시 밴 키 정리) */

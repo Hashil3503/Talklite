@@ -18,3 +18,5 @@ spring:
 talklite:
   presence:
     grace-seconds: 2
+    # 기동 스윕이 테스트 도중 다른 테스트의 멤버를 제거하지 않도록 충분히 크게 둔다 (스윕은 직접 호출로 검증)
+    startup-sweep-seconds: 3600

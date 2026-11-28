@@ -19,6 +19,34 @@ interface TopicSubscription {
 }
 const topicSubscriptions = new Set<TopicSubscription>()
 
+// 서버 재기동 감지용 — 최초로 확인한 서버 인스턴스 ID
+let serverInstanceId: string | null = null
+
+const SERVER_RESTART_MESSAGE =
+  '서버가 다시 시작되었습니다. 최신 상태를 불러오려면 새로고침이 필요합니다. 지금 새로고침할까요?'
+
+/** 이전에 본 인스턴스와 다르면 재기동으로 보고 새로고침을 안내한다 (최초 관찰은 제외) */
+export function shouldPromptRefresh(previousId: string | null, currentId: string | null): boolean {
+  return previousId !== null && currentId !== null && previousId !== currentId
+}
+
+function checkServerInstance() {
+  void fetch('/api/health')
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data: { instanceId?: unknown } | null) => {
+      const currentId = typeof data?.instanceId === 'string' ? data.instanceId : null
+      if (!currentId) return
+      const previousId = serverInstanceId
+      serverInstanceId = currentId
+      if (shouldPromptRefresh(previousId, currentId) && window.confirm(SERVER_RESTART_MESSAGE)) {
+        window.location.reload()
+      }
+    })
+    .catch(() => {
+      // 네트워크 오류는 무시한다
+    })
+}
+
 export function setSessionToken(token: string | null) {
   activeToken = token
 }
@@ -77,6 +105,7 @@ function installHandlers(client: Client) {
 
   client.onConnect = () => {
     restoreSubscriptions(client)
+    checkServerInstance()
     const waiters = connectionWaiters
     connectionWaiters = []
     waiters.forEach((resolve) => resolve(client))
