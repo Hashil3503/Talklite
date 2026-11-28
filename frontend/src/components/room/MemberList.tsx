@@ -3,6 +3,7 @@ import { useRoomStore } from '../../store/roomStore'
 import { useVoiceStore } from '../../store/voiceStore'
 import { getUid } from '../../store/voiceStore'
 import { kickUser } from '../../lib/api'
+import { useToastStore } from '../../store/toastStore'
 
 export const MemberList: React.FC<{ roomId: string }> = ({ roomId }) => {
   const currentRoom = useRoomStore((state) => state.currentRoom)
@@ -10,6 +11,7 @@ export const MemberList: React.FC<{ roomId: string }> = ({ roomId }) => {
   const speaking = useVoiceStore((state) => state.speakingUsers)
   const peerVolumes = useVoiceStore((state) => state.peerVolumes)
   const peerMutes = useVoiceStore((state) => state.peerMutes)
+  const showToast = useToastStore((state) => state.showToast)
   const isInVoice = useVoiceStore((state) => state.isInVoice)
   const voiceCount = useVoiceStore((state) => state.voiceMembers.length)
   const setPeerVolume = useVoiceStore((state) => state.setPeerVolume)
@@ -50,7 +52,7 @@ export const MemberList: React.FC<{ roomId: string }> = ({ roomId }) => {
       await kickUser(currentRoom.id, currentUserId, targetUser, type)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '강퇴 처리에 실패했습니다.'
-      window.alert(msg)
+      showToast(msg, 'error')
     }
   }
 
