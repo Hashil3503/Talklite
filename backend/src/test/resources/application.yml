@@ -13,3 +13,8 @@ spring:
     init:
       mode: always
       schema-locations: classpath:schema.sql
+
+# T-H4: 테스트에서는 퇴장 유예 시간을 2초로 단축한다
+talklite:
+  presence:
+    grace-seconds: 2

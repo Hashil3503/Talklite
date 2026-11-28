@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { type RoomResponse, type ApiChatMessage, getRoomMessages } from '../lib/api'
-import { ensureStompConnected } from '../lib/stomp'
+import { ensureStompConnected, subscribeTopic } from '../lib/stomp'
 import { useVoiceStore } from './voiceStore'
 import { playMentionPing } from '../lib/audioPing'
 
@@ -253,9 +253,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
   connectRoomStomp: async (roomId) => {
     get().disconnectRoomStomp()
-    const client = await ensureStompConnected()
 
-    const subEvents = client.subscribe(`/topic/room/${roomId}`, (message) => {
+    const subEvents = subscribeTopic(`/topic/room/${roomId}`, (message) => {
       try {
         const event: RoomEvent = JSON.parse(message.body)
         get().updateRoomEvent(event)
@@ -264,7 +263,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       }
     })
 
-    const subChat = client.subscribe(`/topic/room/${roomId}/chat`, (message) => {
+    const subChat = subscribeTopic(`/topic/room/${roomId}/chat`, (message) => {
       try {
         const raw: RawChatMessage = JSON.parse(message.body)
         get().addMessage(raw as unknown as ChatMessage)

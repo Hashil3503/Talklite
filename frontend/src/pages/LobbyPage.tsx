@@ -66,7 +66,7 @@ export function LobbyPage({
       try {
         const raw: any = JSON.parse((message as any).body ?? '{}')
         const body = typeof raw === 'string' ? JSON.parse(raw) : raw
-        if (body && body.type === 'ROOM_UPDATED') {
+        if (body && (body.type === 'ROOM_UPDATED' || body.type === 'VOICE_BADGE_UPDATE' || body.type === 'VOICE_STATUS_CHANGED')) {
           useLobbyStore.getState().handleRoomUpdated(body)
           return
         }
@@ -176,7 +176,7 @@ export function LobbyPage({
           {!loading && (
             <div className="room-grid" id="lobby-room-grid">
               {rooms.map((room) => (
-                <RoomCard key={room.id} room={room} onSelect={handleSelectRoom} />
+                <RoomCard key={room.id} room={room} voiceCount={room.voiceCount} onSelect={handleSelectRoom} />
               ))}
             </div>
           )}

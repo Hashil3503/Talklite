@@ -60,14 +60,18 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
     return s.search(s.preset, s.tags, s.sort, s.order, s.game.trim(), s.field)
   },
   handleRoomUpdated: (event: any) => {
-    if (!event || event.type !== 'ROOM_UPDATED') return
+    if (!event) return
     const data = event.data ?? event.extra ?? {}
     const roomId: string = event.roomId
     if (!roomId) return
+    const isRoomUpdated = event.type === 'ROOM_UPDATED'
+    const isVoiceBadge = event.type === 'VOICE_BADGE_UPDATE' || event.type === 'VOICE_STATUS_CHANGED'
+    if (!isRoomUpdated && !isVoiceBadge) return
     const title = (data.title ?? event.title) as string | undefined
     const game = (data.game ?? event.game) as string | undefined
     const tags = (data.tags ?? event.tags) as string[] | undefined
     const capacity = (data.capacity ?? event.capacity) as number | undefined
+    const voiceCount = (event.voiceCount ?? data.voiceCount) as number | undefined
     set((state) => {
       const idx = state.rooms.findIndex((r) => r.id === roomId)
       if (idx === -1) return state
@@ -76,6 +80,7 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
       if (game !== undefined) updated.game = game
       if (Array.isArray(tags)) updated.tags = tags
       if (typeof capacity === 'number') updated.capacity = capacity
+      if (typeof voiceCount === 'number') updated.voiceCount = voiceCount
       const next = [...state.rooms]
       next[idx] = updated
       return { rooms: next }

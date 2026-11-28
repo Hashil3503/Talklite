@@ -1,3 +1,5 @@
+import { recoverSession } from './stomp'
+
 export type RoomScope = 'PUBLIC' | 'PRIVATE'
 export type RoomType = 'TEMPORARY' | 'PERMANENT'
 
@@ -12,6 +14,7 @@ export interface RoomResponse {
   host: string
   createdAt: number
   count: number
+  voiceCount?: number
   members: string[]
 }
 
@@ -74,10 +77,34 @@ async function parseError(res: Response): Promise<never> {
   }
 }
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('talklite_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+/**
+ * 인증 헤더가 포함된 모든 API 호출의 공통 fetch.
+ * 401이면 STOMP와 동일한 세션 복구를 수행하고 새 토큰으로 1회만 재시도한다.
+ */
+async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const send = () =>
+    fetch(input, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), ...getAuthHeaders() } })
+
+  const res = await send()
+  if (res.status !== 401) return res
+  try {
+    await recoverSession()
+  } catch {
+    // 세션 복구 자체가 실패하면 기존과 동일하게 401 응답을 그대로 돌려준다
+    return res
+  }
+  return send()
+}
+
 export async function joinRoom(roomId: string, user: string): Promise<RoomResponse> {
-  const res = await fetch(`/api/rooms/${roomId}/join`, {
+  const res = await authFetch(`/api/rooms/${roomId}/join`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user } satisfies JoinRequest),
   })
   if (!res.ok) return parseError(res)
@@ -85,24 +112,19 @@ export async function joinRoom(roomId: string, user: string): Promise<RoomRespon
 }
 
 export async function leaveRoom(roomId: string, user: string): Promise<RoomResponse> {
-  const res = await fetch(`/api/rooms/${roomId}/leave`, {
+  const res = await authFetch(`/api/rooms/${roomId}/leave`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user } satisfies JoinRequest),
   })
   if (!res.ok) return parseError(res)
   return res.json()
 }
 
-function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('talklite_token')
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
 export async function kickUser(roomId: string, actor: string, targetUser: string, type: KickType): Promise<RoomResponse> {
-  const res = await fetch(`/api/rooms/${roomId}/kick`, {
+  const res = await authFetch(`/api/rooms/${roomId}/kick`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ actor, targetUser, type } satisfies KickRequest),
   })
   if (!res.ok) return parseError(res)
@@ -146,9 +168,9 @@ export async function createSession(user?: string, secret?: string): Promise<Ses
 }
 
 export async function createRoom(input: CreateRoomInput): Promise<RoomResponse> {
-  const res = await fetch('/api/rooms', {
+  const res = await authFetch('/api/rooms', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
   if (!res.ok) return parseError(res)
@@ -156,9 +178,9 @@ export async function createRoom(input: CreateRoomInput): Promise<RoomResponse> 
 }
 
 export async function getInviteCode(roomId: string, actor: string): Promise<InviteCodeResponse> {
-  const res = await fetch(`/api/rooms/${roomId}/invite`, {
+  const res = await authFetch(`/api/rooms/${roomId}/invite`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ actor }),
   })
   if (!res.ok) return parseError(res)
@@ -166,15 +188,15 @@ export async function getInviteCode(roomId: string, actor: string): Promise<Invi
 }
 
 export async function getRoomInviteCode(roomId: string): Promise<InviteCodeResponse> {
-  const res = await fetch(`/api/rooms/${roomId}/invite`, { headers: getAuthHeaders() })
+  const res = await authFetch(`/api/rooms/${roomId}/invite`)
   if (!res.ok) return parseError(res)
   return res.json()
 }
 
 export async function joinWithInviteCode(code: string, user: string): Promise<RoomResponse> {
-  const res = await fetch(`/api/invite/${encodeURIComponent(code)}/join`, {
+  const res = await authFetch(`/api/invite/${encodeURIComponent(code)}/join`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user } satisfies JoinRequest),
   })
   if (!res.ok) return parseError(res)
@@ -182,7 +204,7 @@ export async function joinWithInviteCode(code: string, user: string): Promise<Ro
 }
 
 export async function getRoom(roomId: string): Promise<RoomResponse> {
-  const res = await fetch(`/api/rooms/${roomId}`, { headers: getAuthHeaders() })
+  const res = await authFetch(`/api/rooms/${roomId}`)
   if (!res.ok) return parseError(res)
   return res.json()
 }
@@ -198,7 +220,7 @@ export async function searchRooms(params: SearchParams = {}): Promise<RoomRespon
   if (params.sort) query.set('sort', params.sort)
   if (params.order) query.set('order', params.order)
   const qs = query.toString()
-  const res = await fetch(`/api/search${qs ? `?${qs}` : ''}`, { headers: getAuthHeaders() })
+  const res = await authFetch(`/api/search${qs ? `?${qs}` : ''}`)
   if (!res.ok) {
     throw new Error(`Search failed: ${res.status}`)
   }
@@ -206,9 +228,9 @@ export async function searchRooms(params: SearchParams = {}): Promise<RoomRespon
 }
 
 export async function deleteRoom(roomId: string, actor: string): Promise<void> {
-  const res = await fetch(`/api/rooms/${roomId}`, {
+  const res = await authFetch(`/api/rooms/${roomId}`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ actor }),
   })
   if (!res.ok) return parseError(res)
@@ -222,9 +244,9 @@ export interface UpdateRoomInput {
 }
 
 export async function updateRoom(roomId: string, data: UpdateRoomInput): Promise<RoomResponse> {
-  const res = await fetch(`/api/rooms/${roomId}`, {
+  const res = await authFetch(`/api/rooms/${roomId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })
   if (!res.ok) return parseError(res)
@@ -245,7 +267,7 @@ export interface ApiChatMessage {
 }
 
 export async function getRoomMessages(roomId: string, limit = 50): Promise<ApiChatMessage[]> {
-  const res = await fetch(`/api/rooms/${roomId}/messages?limit=${limit}`, { headers: getAuthHeaders() })
+  const res = await authFetch(`/api/rooms/${roomId}/messages?limit=${limit}`)
   if (!res.ok) return parseError(res)
   return res.json()
 }
@@ -253,11 +275,9 @@ export async function getRoomMessages(roomId: string, limit = 50): Promise<ApiCh
 export async function uploadRoomImage(roomId: string, blob: Blob, filename = 'paste.webp'): Promise<{ url: string; mediaUrl: string }> {
   const form = new FormData()
   form.append('file', blob, filename)
-  const headers = getAuthHeaders()
   // fetch will set multipart boundary automatically — do not set Content-Type
-  const res = await fetch(`/api/rooms/${roomId}/images`, {
+  const res = await authFetch(`/api/rooms/${roomId}/images`, {
     method: 'POST',
-    headers,
     body: form,
   })
   if (!res.ok) return parseError(res)

@@ -79,7 +79,7 @@ public class SearchService {
         return rooms.stream()
                 .sorted(primary.thenComparing(secondary))
                 .limit(LIMIT)
-                .map(room -> RoomResponse.from(room, membersByRoom.get(room.id()), room.title()))
+                .map(room -> RoomResponse.from(room, membersByRoom.get(room.id()), room.title(), roomMapper.voiceCount(room.id())))
                 .toList();
     }
 

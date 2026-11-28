@@ -1,4 +1,4 @@
-import { ensureStompConnected } from './stomp'
+import { ensureStompConnected, subscribeTopic } from './stomp'
 import type { Client, IMessage } from '@stomp/stompjs'
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -69,7 +69,7 @@ export class WebRtcManager {
   async init(): Promise<void> {
     const client = await ensureStompConnected()
     this.client = client
-    this.unsub = client.subscribe(`/topic/room/${this.opts.roomId}/signal/${this.me}`, (message: IMessage) => {
+    this.unsub = subscribeTopic(`/topic/room/${this.opts.roomId}/signal/${this.me}`, (message: IMessage) => {
       let signal: SignalMessage
       try {
         signal = JSON.parse(message.body)

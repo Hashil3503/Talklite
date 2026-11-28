@@ -1,4 +1,4 @@
-import { Client, type IMessage, type StompHeaders } from '@stomp/stompjs'
+import { Client, type IMessage, type StompHeaders, type StompSubscription } from '@stomp/stompjs'
 import { createSession } from './api'
 import { getStoredSecret, getStoredUid, saveSessionCredentials } from './uid'
 import { useUserStore } from '../store/userStore'
@@ -6,6 +6,18 @@ import { useUserStore } from '../store/userStore'
 let stompClient: Client | null = null
 let activeToken: string | null = null
 let recoveryPromise: Promise<void> | null = null
+
+// 단일 onConnect 핸들러의 연결 대기열 — 호출마다 client.onConnect를 감싸면 핸들러가 누적된다
+let connectionWaiters: ((client: Client) => void)[] = []
+let handlersInstalled = false
+
+// 재연결(드롭/세션 복구) 후에도 복원해야 하는 활성 구독 레지스트리
+interface TopicSubscription {
+  topic: string
+  callback: (message: IMessage) => void
+  subscription: StompSubscription | null
+}
+const topicSubscriptions = new Set<TopicSubscription>()
 
 export function setSessionToken(token: string | null) {
   activeToken = token
@@ -15,7 +27,7 @@ function isAuthenticationError(message: string, body: string): boolean {
   return /authentication required|unauthori[sz]ed|unauthenticated|invalid token|access denied/i.test(`${message} ${body}`)
 }
 
-function recoverSession(): Promise<void> {
+export function recoverSession(): Promise<void> {
   if (recoveryPromise) return recoveryPromise
 
   recoveryPromise = (async () => {
@@ -51,6 +63,34 @@ function recoverSession(): Promise<void> {
   return recoveryPromise
 }
 
+/** 연결 수립 시 레지스트리의 모든 구독을 (재)등록한다. */
+function restoreSubscriptions(client: Client) {
+  for (const entry of topicSubscriptions) {
+    // 이전 소켓의 구독은 브로커 측에서 함께 사라지므로 새 연결에서 다시 등록만 한다
+    entry.subscription = client.subscribe(entry.topic, entry.callback)
+  }
+}
+
+function installHandlers(client: Client) {
+  if (handlersInstalled) return
+  handlersInstalled = true
+
+  client.onConnect = () => {
+    restoreSubscriptions(client)
+    const waiters = connectionWaiters
+    connectionWaiters = []
+    waiters.forEach((resolve) => resolve(client))
+  }
+
+  client.onStompError = (frame) => {
+    const message = frame.headers['message'] || ''
+    console.error('STOMP protocol error:', message, frame.body)
+    if (isAuthenticationError(message, frame.body)) {
+      void recoverSession()
+    }
+  }
+}
+
 export function getStompClient(): Client {
   if (stompClient) {
     return stompClient
@@ -76,17 +116,11 @@ export function getStompClient(): Client {
       }
       stompClient!.connectHeaders = headers
     },
-    onStompError: (frame) => {
-      const message = frame.headers['message'] || ''
-      console.error('STOMP protocol error:', message, frame.body)
-      if (isAuthenticationError(message, frame.body)) {
-        void recoverSession()
-      }
-    },
     onWebSocketError: (event) => {
       console.warn('WebSocket connection error:', event)
     },
   })
+  installHandlers(stompClient)
 
   return stompClient
 }
@@ -98,29 +132,37 @@ export function ensureStompConnected(): Promise<Client> {
   }
 
   return new Promise((resolve) => {
-    const prevOnConnect = client.onConnect
-    client.onConnect = (frame) => {
-      if (prevOnConnect) prevOnConnect(frame)
-      resolve(client)
-    }
+    connectionWaiters.push(resolve)
     if (!client.active) {
       client.activate()
     }
   })
 }
 
+/**
+ * 토픽 구독 — 연결 전이면 연결 후 구독하고, 재연결 시에도 자동으로 재등록된다.
+ * 반환된 unsubscribe는 레지스트리에서도 해당 구독을 제거한다.
+ */
 export function subscribeTopic(topic: string, callback: (message: IMessage) => void) {
   const client = getStompClient()
-  if (client.connected) {
-    return client.subscribe(topic, callback)
+  const entry: TopicSubscription = {
+    topic,
+    callback,
+    subscription: client.connected ? client.subscribe(topic, callback) : null,
   }
-  let sub: any = null
-  ensureStompConnected().then((c) => {
-    sub = c.subscribe(topic, callback)
-  })
+  topicSubscriptions.add(entry)
+
+  if (!entry.subscription) {
+    void ensureStompConnected()
+  }
+
   return {
     unsubscribe: () => {
-      if (sub) sub.unsubscribe()
+      topicSubscriptions.delete(entry)
+      if (entry.subscription) {
+        entry.subscription.unsubscribe()
+        entry.subscription = null
+      }
     },
   }
 }

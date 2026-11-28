@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Client } from '@stomp/stompjs'
-import { ensureStompConnected } from '../lib/stomp'
+import { ensureStompConnected, subscribeTopic } from '../lib/stomp'
 import { WebRtcManager } from '../lib/webrtc'
 import { AudioDetector } from '../lib/audioDetector'
 import { VoiceAudioEngineImpl, type OutputDeviceResult } from '../lib/voiceAudioEngine'
@@ -656,7 +656,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     speakerUnsub = null
     const client = await ensureStompConnected()
     stompClient = client
-    speakerUnsub = client.subscribe(`/topic/room/${roomId}/speaker`, (message: { body: string }) => {
+    speakerUnsub = subscribeTopic(`/topic/room/${roomId}/speaker`, (message: { body: string }) => {
       try {
         const event: { speakerId: string; talking: boolean } = JSON.parse(message.body)
         useVoiceStore.setState((state) => ({

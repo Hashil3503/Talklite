@@ -63,7 +63,7 @@ public class RoomService {
                 UUID.randomUUID().toString().substring(0, 8),
                 resolveTitle(request.title(), request.game()),
                 request.game().trim(),
-                request.tags() == null ? List.of() : request.tags().stream().filter(t -> t != null && !t.isBlank()).map(String::trim).toList(),
+                normalizeTags(request.tags()),
                 request.capacity(),
                 request.scope(),
                 request.type(),
@@ -101,7 +101,7 @@ public class RoomService {
         if (room == null) {
             throw new RoomNotFoundException(roomId);
         }
-        return RoomResponse.from(room, roomMapper.members(roomId), room.title());
+        return RoomResponse.from(room, roomMapper.members(roomId), room.title(), roomMapper.voiceCount(roomId));
     }
 
     public RoomResponse join(String roomId, String user) {
@@ -329,7 +329,7 @@ public class RoomService {
         // STOMP ROOM_UPDATED 전파 (방 + 로비)
         eventPublisher.publishRoomUpdated(updated, principal, finalTitle, newGame, newTags, newCapacity, updatedAt);
 
-        return RoomResponse.from(updated, roomMapper.members(roomId), finalTitle);
+        return RoomResponse.from(updated, roomMapper.members(roomId), finalTitle, roomMapper.voiceCount(roomId));
     }
 
     private List<String> normalizeTags(List<String> tags) {

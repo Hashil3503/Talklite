@@ -1,6 +1,7 @@
 package com.talklite.config;
 
 import com.talklite.auth.SessionService;
+import com.talklite.realtime.RoomSessionRegistry;
 import com.talklite.room.RoomMapper;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -11,7 +12,10 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,10 +40,13 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
     private final SessionService sessionService;
     private final RoomMapper roomMapper;
+    private final RoomSessionRegistry roomSessionRegistry;
 
-    public WebSocketAuthInterceptor(SessionService sessionService, RoomMapper roomMapper) {
+    public WebSocketAuthInterceptor(SessionService sessionService, RoomMapper roomMapper,
+                                    RoomSessionRegistry roomSessionRegistry) {
         this.sessionService = sessionService;
         this.roomMapper = roomMapper;
+        this.roomSessionRegistry = roomSessionRegistry;
     }
 
     @Override
@@ -88,6 +95,8 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     accessor.getSessionAttributes().put("roomId", roomId);
                     accessor.getSessionAttributes().put("user", user);
                 }
+                // T-H4: 방 토픽을 구독 중인 live 세션 수 추적 (세션당 방 1회만 카운트)
+                trackRoomSubscription(accessor, roomId, user);
                 return message;
             }
             Matcher signal = SIGNAL_TOPIC.matcher(destination);
@@ -117,6 +126,20 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             throw new MessagingException("authentication required");
         }
         return user.getName();
+    }
+
+    /** T-H4: (roomId, user) live 세션을 세션 ID로 추적한다 (같은 세션의 중복 구독은 1회만). */
+    @SuppressWarnings("unchecked")
+    private void trackRoomSubscription(StompHeaderAccessor accessor, String roomId, String user) {
+        Map<String, Object> attrs = accessor.getSessionAttributes();
+        String sessionId = accessor.getSessionId();
+        if (attrs == null || sessionId == null) {
+            return;
+        }
+        Set<String> tracked = (Set<String>) attrs.computeIfAbsent("roomSubscriptions", k -> new HashSet<String>());
+        if (tracked.add(roomId)) {
+            roomSessionRegistry.add(roomId, user, sessionId);
+        }
     }
 
     private void requirePrivateMember(String roomId, String user) {

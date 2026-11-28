@@ -58,6 +58,6 @@ public class KickService {
 
     private RoomResponse read(String roomId) {
         Room room = roomMapper.find(roomId);
-        return RoomResponse.from(room, roomMapper.members(roomId));
+        return RoomResponse.from(room, roomMapper.members(roomId), null, roomMapper.voiceCount(roomId));
     }
 }

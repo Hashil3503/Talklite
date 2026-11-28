@@ -11,7 +11,7 @@ import java.util.List;
 public record CreateRoomRequest(
         @Size(max = 50) String title,
         @NotBlank String game,
-        @Size(max = 5) List<@NotBlank String> tags,
+        List<@NotBlank String> tags,
         @Min(2) @Max(value = 6, message = "최대 정원은 6명입니다.") int capacity,
         @NotNull RoomScope scope,
         @NotNull RoomType type,
