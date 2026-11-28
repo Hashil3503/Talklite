@@ -5,7 +5,7 @@ spring:
       port: 6379
       database: 1
   datasource:
-    url: jdbc:mariadb://localhost:3306/talklite
+    url: jdbc:mariadb://localhost:3306/talklite_test
     username: talklite
     password: talklitepassword
     driver-class-name: org.mariadb.jdbc.Driver
