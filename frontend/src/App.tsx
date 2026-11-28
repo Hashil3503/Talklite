@@ -4,7 +4,8 @@ import { ToastContainer } from './components/common/Toast'
 import { FloatingVoiceWidget } from './components/voice/FloatingVoiceWidget'
 import { LobbyPage } from './pages/LobbyPage'
 import { RoomPage } from './pages/RoomPage'
-import { createSession, leaveRoom } from './lib/api'
+import { createSession, getRoom, joinRoom, leaveRoom } from './lib/api'
+import { getInitialRoomId, saveCurrentRoomId } from './lib/currentRoom'
 import { setSessionToken } from './lib/stomp'
 import { getStoredSecret, getStoredUid, saveSessionCredentials } from './lib/uid'
 import { useRoomStore } from './store/roomStore'
@@ -14,10 +15,7 @@ import { useVoiceStore } from './store/voiceStore'
 export type ActiveView = 'LOBBY' | 'ROOM'
 
 export function App() {
-  const [currentRoomId, setCurrentRoomId] = useState<string | null>(() => {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('room')
-  })
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(() => getInitialRoomId(window.location.search))
   const [activeView, setActiveView] = useState<ActiveView>(() =>
     new URLSearchParams(window.location.search).get('room') ? 'ROOM' : 'LOBBY'
   )
@@ -46,6 +44,27 @@ export function App() {
       })
       .finally(() => setSessionReady(true))
   }, [])
+
+  // 참여 중인 방을 탭 저장소에 기억 — 로비 화면에서 새로고침해도 방 참여가 유지되도록
+  useEffect(() => {
+    saveCurrentRoomId(currentRoomId)
+  }, [currentRoomId])
+
+  // 로비 화면에서 새로고침한 경우: 방 화면은 열지 않고 방 연결(구독)만 다시 맺어 T-H4 유예 퇴장을 막는다
+  useEffect(() => {
+    if (!sessionReady || activeView !== 'LOBBY' || !currentRoomId) return
+    if (useRoomStore.getState().currentRoom?.id === currentRoomId) return
+    const roomId = currentRoomId
+    joinRoom(roomId, getStoredUid())
+      .catch(() => getRoom(roomId)) // 비공개 방은 재입장 대신 멤버 조회
+      .then((room) => {
+        if (!room.members.includes(getStoredUid())) throw new Error('not a member') // 강퇴된 공개 방
+        useRoomStore.getState().setCurrentRoom(room)
+      })
+      .catch(() => setCurrentRoomId(null)) // 방이 사라졌거나 강퇴됨
+    // 최초 복원만 담당 — 화면 전환 시에는 다시 실행하지 않는다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionReady])
 
   // P0-01: 비정상 단절(beforeunload/pagehide) 시 음성 리소스 정리 (STOMP Presence가 Redis 잔류 자동 정리)
   useEffect(() => {
