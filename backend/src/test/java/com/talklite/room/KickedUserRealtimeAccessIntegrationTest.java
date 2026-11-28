@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -101,12 +102,10 @@ public class KickedUserRealtimeAccessIntegrationTest extends IntegrationTestClea
         assertTrue(objectMapper.readValue(history, List.class).isEmpty(),
                 "강퇴된 사용자의 채팅은 저장되지 않는다");
 
-        // 음성 참여: 현재 VoiceService.start 에는 멤버십 가드가 없어 강퇴자도 수용된다.
-        // (요구사항은 '거부 또는 무시'이므로, 이 동작이 바뀌면 아래 단언을 함께 갱신해야 한다.)
-        assertDoesNotThrow(() -> voiceService.start(roomId, "kicked-user"),
-                "현 동작: 음성 시작은 멤버십 가드가 없어 예외 없이 처리된다");
-        assertTrue(voiceService.getVoiceMembers(roomId).contains("kicked-user"),
-                "현 동작: 강퇴된 사용자도 음성 참여자로 등록된다 (가드 부재)");
+        // 음성 참여: 강퇴된 사용자의 음성 시작은 무시된다 (음성 참여자로 등록되지 않음)
+        assertDoesNotThrow(() -> voiceService.start(roomId, "kicked-user"));
+        assertFalse(voiceService.getVoiceMembers(roomId).contains("kicked-user"),
+                "강퇴된 사용자는 음성 참여자로 등록되지 않는다");
 
         kickedClient.close();
         hostListener.close();

@@ -35,6 +35,10 @@ public class VoiceService {
         if (room == null) {
             throw new RoomNotFoundException(roomId);
         }
+        // DEF-05: 방 멤버가 아니면(강퇴자 포함) 음성 참여자로 등록하지 않는다
+        if (!roomMapper.members(roomId).contains(user)) {
+            return;
+        }
         // 원자적 음성 정원 가드 (voice_join.lua)
         Long result = redis.execute(
                 voiceJoinScript,

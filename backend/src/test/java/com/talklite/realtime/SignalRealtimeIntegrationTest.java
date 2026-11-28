@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -39,6 +40,9 @@ public class SignalRealtimeIntegrationTest extends IntegrationTestCleanup {
 
     @Autowired
     private RoomMapper roomMapper;
+
+    @Autowired
+    private StringRedisTemplate redis;
 
     @LocalServerPort
     private int port;
@@ -122,6 +126,10 @@ public class SignalRealtimeIntegrationTest extends IntegrationTestCleanup {
             sessions.add(createSession("vc-user-" + i));
         }
         String roomId = createRoom("Capacity Game", "vc-user-1");
+        // 음성 시작은 방 멤버만 가능 → 방 정원(6)과 별개로 음성 정원 가드를 보려고 7명 모두 멤버로 직접 넣는다
+        for (int i = 2; i <= 7; i++) {
+            redis.opsForSet().add(roomMapper.membersKey(roomId), "vc-user-" + i);
+        }
 
         StompTestClient observer = new StompTestClient(port, sessions.get(0).token());
         observer.subscribe("/topic/room/" + roomId);

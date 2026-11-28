@@ -184,6 +184,11 @@ public class DefectRemediationIntegrationTest extends IntegrationTestCleanup {
                 .andReturn().getResponse().getContentAsString();
         String roomId = objectMapper.readValue(res, RoomResponse.class).id();
 
+        // 음성 시작은 방 멤버만 가능 → 음성 정원 가드를 방 정원과 별개로 검증하기 위해 멤버 7명을 Redis에 직접 넣는다
+        for (int i = 1; i <= 7; i++) {
+            redis.opsForSet().add(roomMapper.membersKey(roomId), "user-" + i);
+        }
+
         // 6명 음성 참여
         for (int i = 1; i <= 6; i++) {
             voiceService.start(roomId, "user-" + i);
